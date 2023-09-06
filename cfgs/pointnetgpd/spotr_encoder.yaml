@@ -1,0 +1,24 @@
+model:
+    NAME: SPoTrEncoder
+    blocks: [1, 1, 1, 1, 1]
+    strides: [1, 2, 2, 2, 2]
+    width: 64 # channel num of the first mlp output
+    in_channels: 3
+    expansion: 4 # LPA arg
+    radius: 0.1
+    nsample: 32
+    gamma: 16
+    num_gp: 16 # SP point num
+    tau: 0.1
+    aggr_args:
+        feature_type: 'dp_df'
+        reduction: 'max'
+    group_args:
+        NAME: 'ballquery'
+        normalize_dp: True
+    conv_args:
+        order: conv-norm-act
+    act_args:
+        act: 'relu'
+    norm_args:
+        norm: 'bn'

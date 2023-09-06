@@ -1,0 +1,29 @@
+model:
+  NAME: SpoTrBackbone
+  encoder_args:
+    NAME: SPoTrEncoder2
+    blocks: [1, 1, 1, 1, 1]
+    strides: [1, 4, 4, 4, 4]
+    width: 64
+    in_channels: 3
+    expansion: 4
+    radius: 0.1
+    nsample: 32
+    gamma: 16
+    num_gp: 16
+    tau: 0.5
+    task: 'seg'
+    aggr_args:
+      feature_type: 'dp_df'
+      reduction: 'max'
+    group_args:
+      NAME: 'ballquery'
+      normalize_dp: True
+    conv_args:
+      order: conv-norm-act
+    act_args:
+      act: 'relu'
+    norm_args:
+      norm: 'bn'
+  decoder_args:
+    NAME: SPoTrDecoder2
