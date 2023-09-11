@@ -1,7 +1,7 @@
 import numpy as np
 import os,sys,yaml,copy,pickle
 import pybullet as p
-from pybullet_tools.utils import *
+from experiment.pybullet_tools.utils import *
 
 cv_from_gl = np.eye(4)
 cv_from_gl[1,1] = -1
@@ -9,13 +9,20 @@ cv_from_gl[2,2] = -1
 
 # H = 1544   # image height
 # W = 2064   # image width
-H = 480   # image height
-W = 640   # image width
 # K = np.array([2257.7500557850776, 0,                  int(W/2),
 #               0,                  2257.4882391629421, int(H/2),
 #               0,                  0,                  1]).reshape(3,3)
-K = np.array([700.0775366775434, 0,                  int(W/2),
-              0,                  701.8098152838163, int(H/2),
+
+# H = 480
+# W = 640
+# K = np.array([700.0775366775434, 0,                  int(W/2),
+#               0,                  701.8098152838163, int(H/2),
+#               0,                  0,                  1]).reshape(3,3)
+
+H = 720
+W = 1280
+K = np.array([1400.1550733550869, 0,                  int(W/2),
+              0,                  1052.7147229257243, int(H/2),
               0,                  0,                  1]).reshape(3,3)
 
 
@@ -31,7 +38,7 @@ class Camera:
     camera_from_world = np.linalg.inv(self.world_from_camera)
     self.cam_gl_from_world = cv_from_gl @ camera_from_world
     
-    self.model_id = load_pybullet("resources/kinect/kinect.urdf", fixed_base=True)
+    self.model_id = load_pybullet("experiment/resources/kinect/kinect.urdf", fixed_base=True)
     world_from_camera_model = multiply(world_from_camera, Pose(euler=[0, -math.radians(90), math.radians(90)]))
     set_pose(self.model_id, world_from_camera_model)
 

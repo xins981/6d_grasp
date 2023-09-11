@@ -5,7 +5,7 @@ import open3d as o3d
 from collections import namedtuple
 import torch
 from matplotlib.colors import LinearSegmentedColormap
-from pybullet_tools.utils import pose_from_tform
+from experiment.pybullet_tools.utils import pose_from_tform
 
 
 def to_grasp(param):

@@ -467,7 +467,7 @@ class CylinderQueryAndGroup(nn.Module):
     radius : float32
         Radius of cylinder
     hmin, hmax: float32
-        endpoints of cylinder height in x-rotation axis
+        endpoints of cylinder height in x-rotation axis （接触向量）
     nsample : int32
         Maximum number of features to gather in the ball
     """

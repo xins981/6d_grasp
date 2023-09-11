@@ -9,15 +9,10 @@ import numpy as np
 import sys
 import os
 import time
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR = os.path.dirname(BASE_DIR)
-sys.path.append(ROOT_DIR)
-sys.path.append(os.path.join(ROOT_DIR, 'utils'))
-
-from loss_utils import GRASP_MAX_WIDTH, GRASP_MAX_TOLERANCE, THRESH_GOOD, THRESH_BAD,\
+from utils.loss_utils import GRASP_MAX_WIDTH, GRASP_MAX_TOLERANCE, THRESH_GOOD, THRESH_BAD,\
                        transform_point_cloud, generate_grasp_views,\
                        batch_viewpoint_params_to_matrix, huber_loss
+
 
 def get_loss(end_points):
     objectness_loss, end_points = compute_objectness_loss(end_points)
@@ -26,6 +21,7 @@ def get_loss(end_points):
     loss = objectness_loss + view_loss + 0.2 * grasp_loss
     end_points['loss/overall_loss'] = loss
     return loss, end_points
+
 
 def compute_objectness_loss(end_points):
     criterion = nn.CrossEntropyLoss(reduction='mean')
@@ -36,17 +32,18 @@ def compute_objectness_loss(end_points):
     loss = criterion(objectness_score, objectness_label)
 
     end_points['loss/stage1_objectness_loss'] = loss
+
     objectness_pred = torch.argmax(objectness_score, 1)
     end_points['stage1_objectness_acc'] = (objectness_pred == objectness_label.long()).float().mean()
-
     end_points['stage1_objectness_prec'] = (objectness_pred == objectness_label.long())[objectness_pred == 1].float().mean()
     end_points['stage1_objectness_recall'] = (objectness_pred == objectness_label.long())[objectness_label == 1].float().mean()
 
     return loss, end_points
 
+
 def compute_view_loss(end_points):
     criterion = nn.MSELoss(reduction='none')
-    view_score = end_points['view_score']
+    view_score = end_points['view_score'] # (B, Ns, 300)
     view_label = end_points['batch_grasp_view_label']
     objectness_label = end_points['objectness_label']
     fp2_inds = end_points['fp2_inds'].long()

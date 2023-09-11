@@ -43,7 +43,7 @@ class ApproachNet(nn.Module):
                 end_points: [dict]
         """
         B, num_seed, _ = seed_xyz.size()
-        features = F.relu(self.bn1(self.conv1(seed_features)), inplace=True) # 这里的 1-D 卷积和 MLP 感觉没有什么差别嘛
+        features = F.relu(self.bn1(self.conv1(seed_features)), inplace=True)
         features = F.relu(self.bn2(self.conv2(features)), inplace=True)
         features = self.conv3(features)
         objectness_score = features[:, :2, :] # (B, 2, num_seed) 点级别的质量
@@ -121,7 +121,7 @@ class CloudCrop(nn.Module):
         for grouper in self.groupers:
             grouped_features.append(grouper(
                 pointcloud, seed_xyz, vp_rot
-            )) # (batch_size, feature_dim, num_seed, nsample)
+            )) # (batch_size, feature_dim, num_seed, nsample) 3, 1024, 64。 取出 clidner 中的点，没有特征。每个 cliender 最多含 64 个点
         grouped_features = torch.stack(grouped_features, dim=3) # (batch_size, feature_dim, num_seed, num_depth, nsample)
         grouped_features = grouped_features.view(B, -1, num_seed*num_depth, self.nsample) # (batch_size, feature_dim, num_seed*num_depth, nsample)
 
@@ -146,7 +146,7 @@ class OperationNet(nn.Module):
                 number of gripper depth classes
     """
     def __init__(self, num_angle, num_depth):
-        # Output:
+        # Output: 
         # scores(num_angle)
         # angle class (num_angle)
         # width (num_angle)
@@ -178,7 +178,7 @@ class OperationNet(nn.Module):
         vp_features = self.conv3(vp_features)
         vp_features = vp_features.view(B, -1, num_seed, num_depth)
 
-        # split prediction
+        # split prediction 分类 logists, 旋转角度确定靠分类，分数和宽度靠回归，每个旋转角度都有一个分数和宽度
         end_points['grasp_score_pred'] = vp_features[:, 0:self.num_angle]
         end_points['grasp_angle_cls_pred'] = vp_features[:, self.num_angle:2*self.num_angle]
         end_points['grasp_width_pred'] = vp_features[:, 2*self.num_angle:3*self.num_angle]
@@ -196,7 +196,7 @@ class ToleranceNet(nn.Module):
                 number of gripper depth classes
     """
     def __init__(self, num_angle, num_depth):
-        # Output:
+        # Output: 也是分类
         # tolerance (num_angle)
         super().__init__()
         self.conv1 = nn.Conv1d(256, 128, 1)

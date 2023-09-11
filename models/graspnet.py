@@ -17,10 +17,10 @@ from openpoints.utils import EasyConfig
 class GraspNetStage1(nn.Module):
     def __init__(self, input_feature_dim=0, num_view=300):
         super().__init__()
-        # cfg = EasyConfig()
-        # cfg.load("/home/shixin/code/graspnet-baseline/cfgs/benchmark/spotr.yaml", recursive=True)
-        # self.backbone = build_model_from_cfg(cfg.model)
-        self.backbone = Pointnet2Backbone(input_feature_dim)
+        cfg = EasyConfig()
+        cfg.load("cfgs/benchmark/spotr.yaml", recursive=True)
+        self.backbone = build_model_from_cfg(cfg.model)
+        # self.backbone = Pointnet2Backbone(input_feature_dim)
         self.vpmodule = ApproachNet(num_view, 256)
 
     def forward(self, end_points):
@@ -51,7 +51,7 @@ class GraspNetStage2(nn.Module):
             seed_xyz = end_points['fp2_xyz']
 
         vp_features = self.crop(seed_xyz, pointcloud, grasp_top_views_rot)
-        end_points = self.operation(vp_features, end_points)
+        end_points = self.operation(vp_features, end_points) # 拿每个圆柱体的特征，预测质量、旋转、宽度
         end_points = self.tolerance(vp_features, end_points)
 
         return end_points
@@ -91,7 +91,7 @@ def pred_decode(end_points):
         grasp_angle_class = torch.argmax(grasp_angle_class_score, 0)
         grasp_angle = grasp_angle_class.float() / 12 * np.pi
         # grasp score & width & tolerance
-        grasp_angle_class_ = grasp_angle_class.unsqueeze(0)
+        grasp_angle_class_ = grasp_angle_class.unsqueeze(0) # (Nk, 4) -> (1, Nk, 4)
         grasp_score = torch.gather(grasp_score, 0, grasp_angle_class_).squeeze(0)
         grasp_width = torch.gather(grasp_width, 0, grasp_angle_class_).squeeze(0)
         grasp_tolerance = torch.gather(grasp_tolerance, 0, grasp_angle_class_).squeeze(0)
@@ -107,15 +107,15 @@ def pred_decode(end_points):
         grasp_tolerance = torch.gather(grasp_tolerance, 1, grasp_depth_class)
 
         ## slice preds by objectness
-        objectness_pred = torch.argmax(objectness_score, 0)
-        objectness_mask = (objectness_pred==1)
-        grasp_score = grasp_score[objectness_mask]
-        grasp_width = grasp_width[objectness_mask]
-        grasp_depth = grasp_depth[objectness_mask]
-        approaching = approaching[objectness_mask]
-        grasp_angle = grasp_angle[objectness_mask]
-        grasp_center = grasp_center[objectness_mask]
-        grasp_tolerance = grasp_tolerance[objectness_mask]
+        # objectness_pred = torch.argmax(objectness_score, 0)
+        # objectness_mask = (objectness_pred==1)
+        # grasp_score = grasp_score[objectness_mask]
+        # grasp_width = grasp_width[objectness_mask]
+        # grasp_depth = grasp_depth[objectness_mask]
+        # approaching = approaching[objectness_mask]
+        # grasp_angle = grasp_angle[objectness_mask]
+        # grasp_center = grasp_center[objectness_mask]
+        # grasp_tolerance = grasp_tolerance[objectness_mask]
         grasp_score = grasp_score * grasp_tolerance / GRASP_MAX_TOLERANCE
 
         ## convert to rotation matrix

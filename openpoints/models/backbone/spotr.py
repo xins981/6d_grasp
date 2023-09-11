@@ -745,7 +745,7 @@ class SPoTrEncoder2(nn.Module):
     def __init__(self,
                  in_channels: int = 4,
                  width: int = 32,
-                 blocks: List[int] = [1, 5, 5, 5, 5], # len(blocks): number of spotr block; blocks[i]: number of LPAMLP layers in i-th spotr block
+                 blocks: List[int] = [1, 5, 5, 5, 5], # len(blocks): number of spotr block; blocks[i]-1: number of LPAMLP layers in i-th spotr block
                  strides: List[int] = [4, 4, 4, 4],
                  block: str = 'LPAMLP2',
                  nsample: int or List[int] = 32,

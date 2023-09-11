@@ -4,11 +4,11 @@ import pybullet as p
 from experiment.camera import Camera
 from uuid import uuid4
 import open3d as o3d
-from pybullet_tools.utils import *
-from pybullet_tools.panda_primitives import *
-from pybullet_tools.ikfast.franka_panda.ik import PANDA_INFO, FRANKA_URDF
-from pybullet_tools.ikfast.ikfast import get_ik_joints, either_inverse_kinematics, check_ik_solver
-from utils.sim_utils import *
+from experiment.pybullet_tools.utils import *
+from experiment.pybullet_tools.panda_primitives import *
+from experiment.pybullet_tools.ikfast.franka_panda.ik import PANDA_INFO, FRANKA_URDF
+from experiment.pybullet_tools.ikfast.ikfast import get_ik_joints, either_inverse_kinematics, check_ik_solver
+from experiment.utils import *
 import yaml
 
 # egl = pkgutil.get_loader('eglRenderer')
@@ -27,21 +27,18 @@ class Environment:
         sim_id = p.connect(method)
         p.setTimeStep(1. / 240.)
         CLIENTS[sim_id] = True if vis else None
-        # draw_global_system(length=0.1)
-        # set_camera_pose([1, 1, 1], target_point=[0.5, 0.5, 0.01])
         add_data_path()
-        # self.plugin = p.loadPlugin(egl.get_filename(), "_eglRendererPlugin")
         p.setGravity(0, 0, -9.8)
         with LockRenderer():
             with HideOutput(True):
-                plane = load_pybullet('resources/plane/plane.urdf', fixed_base=True)
-                self.board = load_pybullet('resources/board.urdf', fixed_base=True)
+                plane = load_pybullet('experiment/resources/plane/plane.urdf', fixed_base=True)
+                self.board = load_pybullet('experiment/resources/board.urdf', fixed_base=True)
                 set_point(self.board, [0.5, 0.5, 0.01/2])
                 set_color(self.board, GREY)
-                tray = load_pybullet('resources/tray/traybox.urdf', fixed_base=True)
+                tray = load_pybullet('experiment/resources/tray/traybox.urdf', fixed_base=True)
                 set_point(tray, [0.5, -0.5, 0.02/2])
                
-                self.gripper = load_pybullet('resources/franka_description/robots/hand.urdf', fixed_base=True)
+                self.gripper = load_pybullet('experiment/resources/franka_description/robots/hand.urdf', fixed_base=True)
                 assign_link_colors(self.gripper, max_colors=3, s=0.5, v=1.)
                 set_configuration(self.gripper, CONF_OPEN)
                 set_pose(self.gripper, HOME_POSE_GRIPPER)
@@ -51,100 +48,15 @@ class Environment:
                 self.world_from_camera = multiply(world_from_floor, floor_from_camera)
                 self.camera = Camera(self.world_from_camera)
                 self.fixed = [plane, tray]
-                # draw_pose(self.world_from_camera, length=0.05, width=3)
-                
         self.workspace = np.asarray([[0.1, 0.9], 
                                      [0.1, 0.9]])
         self.aabb_workspace = aabb_from_extent_center([0.8, 0.8, 0.3], 
                                                       [0.5, 0.5, 0.01+(0.3/2)])
-        # draw_pose(get_pose(self.gripper), length=0.2, width=3)
-        # dump_body(self.robot)
-        
-        # joint0_id = p.addUserDebugParameter("joint0", -2.897, 2.897, 0)
-        # joint1_id = p.addUserDebugParameter("joint1", -1.763, 1.763, 0)
-        # joint2_id = p.addUserDebugParameter("joint2", -2.897, 2.897, 0)
-        # joint3_id = p.addUserDebugParameter("joint3", -3.072, -0.070, 0)
-        # joint4_id = p.addUserDebugParameter("joint4", -2.897, 2.897, 0)
-        # joint5_id = p.addUserDebugParameter("joint5", -0.018, 3.752, 0)
-        # joint6_id = p.addUserDebugParameter("joint6", -2.897, 2.897, 0)
-        # joint9_id = p.addUserDebugParameter("joint9", 0, 0.04, 0)
-        # joint10_id = p.addUserDebugParameter("joint10", 0, 0.04, 0)
-
-        # while True:
-        #     joint0 = p.readUserDebugParameter(joint0_id)
-        #     joint1 = p.readUserDebugParameter(joint1_id)
-        #     joint2 = p.readUserDebugParameter(joint2_id)
-        #     joint3 = p.readUserDebugParameter(joint3_id)
-        #     joint4 = p.readUserDebugParameter(joint4_id)
-        #     joint5 = p.readUserDebugParameter(joint5_id)
-        #     joint6 = p.readUserDebugParameter(joint6_id)
-        #     joint9 = p.readUserDebugParameter(joint9_id)
-        #     joint10 = p.readUserDebugParameter(joint10_id)
-
-        # set_configuration(self.robot, [joint0, joint1, joint2, joint3, joint4, joint5, joint6, joint9, joint10])
-                        
-        # self.ik_info = PANDA_INFO
-        # self.tool_link = link_from_name(self.robot, 'panda_hand')
-        # self.ik_joints = get_ik_joints(self.robot, self.ik_info, self.tool_link)
-        # self.moveable_joints = get_movable_joints(self.robot)
-        
-        # self.finger_joints = joints_from_names(self.robot, ["panda_finger_joint1", "panda_finger_joint2"])
-        # self.ee_close_values = get_min_limits(self.robot, self.finger_joints)
-        # self.ee_open_values = get_max_limits(self.robot, self.finger_joints)
-        
         self.finger_joints = joints_from_names(self.gripper, ["panda_finger_joint1", "panda_finger_joint2"])
         self.finger_links = links_from_names(self.gripper, ['panda_leftfinger', 'panda_rightfinger'])
-        # self.gripper_from_approach = Pose(point=[0,0,-0.03])
         self.grasp_from_gripper = Pose(point=Point(-0.1, 0, 0), euler=Euler(0, 1.57079632679489660, 0))
         
-        # draw_pose(Pose(), parent=self.robot, parent_link=11)
-
-        # draw_aabb(get_subtree_aabb(plane))
-        # draw_aabb(get_subtree_aabb(floor))
-        # draw_aabb(get_subtree_aabb(tray))
-        # draw_aabb(get_subtree_aabb(self.robot))
-
-        # saved_world = WorldSaver()
-        # quat = get_link_pose(self.robot, 11)[1]
-        # world_from_grasp_bin_overhead = ([0.5, -0.5, 0.4], quat)
-        # wrold_from_gripper_bin_overhead = multiply(self.world_from_grasp_bin_overhead, self.grasp_from_gripper)
-        # draw_pose(wrold_from_gripper_bin_overhead, width=2)
-        # conf_robot_bin_overhead = get_ik_conf(self.robot, self.ik_info, self.ik_joints, self.tool_link, 
-        #                                     wrold_from_gripper_bin_overhead, obstacles=self.fixed)
-        # if conf_robot_bin_overhead is None:
-        #     print("calcu ik gripper in bin overhead failed")
-        # path_bin_overhead = plan_direct_joint_motion(self.robot, self.ik_joints, conf_robot_bin_overhead, obstacles=self.fixed)
-        # if path_bin_overhead is None:
-        #     print("to bin overhead plan failed")
-        # self.command_to_bin_overhead = Command([BodyPath(self.robot, path_bin_overhead, joints=self.ik_joints)])
-        # saved_world.restore()
-        # self.command_to_bin_overhead.refine(num_steps=10).execute(time_step=0.005)
-        
-        # Define colors for object meshes (Tableau palette)
-        # self.color_space = np.asarray([[78.0, 121.0, 167.0], # blue
-        #                                 [89.0, 161.0, 79.0], # green
-        #                                 [156, 117, 95], # brown
-        #                                 [242, 142, 43], # orange
-        #                                 [237.0, 201.0, 72.0], # yellow
-        #                                 [186, 176, 172], # gray
-        #                                 [255.0, 87.0, 89.0], # red
-        #                                 [176, 122, 161], # purple
-        #                                 [118, 183, 178], # cyan
-        #                                 [255, 157, 167]])/255.0 #pink
-
-        # Read files in object mesh directory
-        # mesh_dir = "resources/objects/ycb"
-        # with open(f'{mesh_dir}/config.yml','r') as ff:
-        #     cfg = yaml.safe_load(ff)
-        # self.obj_files = []
-        # for name in cfg['load_obj']:
-        #     self.obj_files.append(os.path.join(mesh_dir, f'{name}.obj'))
-
-        # mesh_dir = "resources/objects/blocks/obj"
-        # for obj_name in [0, 1, 2, 3, 4, 5]:
-        #     self.obj_files.append(os.path.join(mesh_dir, f'{name}.obj'))
-
-        urdf_dir = "resources/objects/ycb"
+        urdf_dir = "experiment/resources/objects/ycb"
         with open(f'{urdf_dir}/config.yml','r') as ff:
             cfg = yaml.safe_load(ff)
         self.urdf_files = []
@@ -154,8 +66,6 @@ class Environment:
         self.mesh_ids = []
         self.mesh_to_urdf = {}
 
-        # self.pcd_dir = f'logs/data/{datetime.datetime.now().strftime("%Y-%m-%d.%H:%M:%S")}'
-        # os.makedirs(self.pcd_dir, exist_ok=True)
 
 
     def seed(self, seed=None):
@@ -173,9 +83,9 @@ class Environment:
         while self.sim_until_stable() == False:
             self.clean_objects()
             self.add_objects()
-        observation = self.get_observation()
+        observation, pcd = self.get_observation()
         
-        return observation, {}
+        return observation, pcd, {}
 
 
     def step(self, gg):
@@ -263,41 +173,39 @@ class Environment:
                 self.open_ee()
                 continue
             else:
+                saved_world = WorldSaver()
                 self.close_ee()
                 grasped_obj = self.get_grasped_obj()
                 if grasped_obj != None:
-                    saved_world = WorldSaver()
-                    if self.is_grasp_success():
-                        world_from_gobj = get_pose(grasped_obj)
-                        gripper_from_world = invert(world_from_gripper)
-                        gripper_from_gobj = multiply(gripper_from_world, world_from_gobj)
-                        set_point(self.gripper, [0.5, 0.5, 0.5])
-                        world_from_gripper = get_pose(self.gripper)
-                        world_from_gobj = multiply(world_from_gripper, gripper_from_gobj)
-                        set_pose(grasped_obj, world_from_gobj)
-                        self.sim_until_stable()
+                    world_from_gobj = get_pose(grasped_obj)
+                    gripper_from_world = invert(world_from_gripper)
+                    gripper_from_gobj = multiply(gripper_from_world, world_from_gobj)
+                    set_point(self.gripper, [0.5, 0.5, 0.5])
+                    world_from_gripper = get_pose(self.gripper)
+                    world_from_gobj = multiply(world_from_gripper, gripper_from_gobj)
+                    set_pose(grasped_obj, world_from_gobj)
+                    self.sim_until_stable()
                     grasp_success = self.is_grasp_success()
                     if grasp_success == True:
                         set_point(grasped_obj, [0.5, -0.5, 0.5])
-                        self.sim_until_stable()
                     else:
                         saved_world.restore()
                         num_unstable_grasp += 1
                 else:
+                    saved_world.restore()
                     grasp_success = False
                     num_unstable_grasp += 1
-                
             set_pose(self.gripper, HOME_POSE_GRIPPER)
             self.open_ee()
-
+            self.sim_until_stable()
             if grasp_success == True:
                 break
             
-        observation = self.get_observation()
+        observation, pcd = self.get_observation()
         terminated = not self.exist_obj_in_workspace()
         info = {"is_success": grasp_success, "num_attem": num_attem, 'num_colli_grasp': num_colli_grasp, "num_unstable_grasp": num_unstable_grasp}
     
-        return observation, terminated, info
+        return observation, pcd, terminated, info
 
 
     def close(self):
@@ -313,6 +221,15 @@ class Environment:
         for id in (self.fixed+[self.gripper]):
             bg_mask[seg==id] = 1
         camera_from_pts = pts_scene[bg_mask==False]
+        
+        colors_scene = rgb[bg_mask==False]
+        # data_to_save = {
+        #     'xyz': camera_from_pts,
+        #     'xyz_color': colors_scene
+        # }
+        # np.savez('point_and_color_data.npz', **data_to_save)
+        pcd_scene = toOpen3dCloud(camera_from_pts, colors_scene)
+        # o3d.io.write_point_cloud("pcd_scene.ply", pcd_scene)
 
         num_pts = 20000
         if len(camera_from_pts) >= num_pts:
@@ -327,7 +244,7 @@ class Environment:
         # o3d.io.write_point_cloud(f'{self.pcd_dir}/objs_down.ply', pcd_objs)
         # o3d.io.write_point_cloud(f'{self.pcd_dir}/floor_down.ply', pcd_floor)
 
-        return camera_from_pts.astype(np.float32)
+        return camera_from_pts.astype(np.float32), pcd_scene
     
     
     def add_objects(self):

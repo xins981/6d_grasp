@@ -1,14 +1,38 @@
 model:
   NAME: SpoTrBackbone
   encoder_args:
+    # NAME: SPoTrEncoder
+    # blocks: [1, 2, 2, 2, 2]
+    # strides: [1, 4, 4, 4, 4]
+    # width: 64
+    # in_channels: 4
+    # expansion: 4
+    # radius: 0.1
+    # nsample: 32
+    # gamma: 16
+    # num_gp: 16
+    # tau: 0.5
+    # task: 'seg'
+    # aggr_args:
+    #   feature_type: 'dp_df'
+    #   reduction: 'max'
+    # group_args:
+    #   NAME: 'ballquery'
+    #   normalize_dp: True
+    # conv_args:
+    #   order: conv-norm-act
+    # act_args:
+    #   act: 'relu'
+    # norm_args:
+    #   norm: 'bn'
     NAME: SPoTrEncoder2
-    blocks: [1, 1, 1, 1, 1]
-    strides: [1, 4, 4, 4, 4]
-    width: 64
+    blocks: [1, 2, 2, 2, 2]
+    strides: [1, 10, 2, 2, 2] # 20000, 2000, 1000, 500, 250
+    width: 64 # 第一层（纯 MLP）通道数 64, 128, 256, 512, 1024
     in_channels: 3
     expansion: 4
-    radius: 0.1
-    nsample: 32
+    radius: [0.04, 0.04, 0.1, 0.2, 0.3]
+    nsample: [64, 64, 32, 16, 16]
     gamma: 16
     num_gp: 16
     tau: 0.5
