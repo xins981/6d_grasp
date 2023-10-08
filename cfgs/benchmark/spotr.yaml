@@ -25,10 +25,15 @@ model:
     #   act: 'relu'
     # norm_args:
     #   norm: 'bn'
+    
+    # encoder 类名
     NAME: SPoTrEncoder2
+    # 每个 block 中 LPA 模块数
     blocks: [1, 2, 2, 2, 2]
-    strides: [1, 10, 2, 2, 2] # 20000, 2000, 1000, 500, 250
-    width: 64 # 第一层（纯 MLP）通道数 64, 128, 256, 512, 1024
+    # 点云下采样倍率 20000, 2000, 1000, 500, 250
+    strides: [1, 10, 2, 2, 2] 
+    # 第一层（纯 MLP）通道数 64, 128, 256, 512, 1024
+    width: 64 
     in_channels: 3
     expansion: 4
     radius: [0.04, 0.04, 0.1, 0.2, 0.3]

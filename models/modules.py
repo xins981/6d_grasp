@@ -46,8 +46,8 @@ class ApproachNet(nn.Module):
         features = F.relu(self.bn1(self.conv1(seed_features)), inplace=True)
         features = F.relu(self.bn2(self.conv2(features)), inplace=True)
         features = self.conv3(features)
-        objectness_score = features[:, :2, :] # (B, 2, num_seed) 点级别的质量
-        view_score = features[:, 2:2+self.num_view, :].transpose(1,2).contiguous() # (B, num_seed, num_view) 接触向量级别的质量
+        objectness_score = features[:, :2, :] # (B, 2, num_seed) 物体点分类 logit
+        view_score = features[:, 2:2+self.num_view, :].transpose(1,2).contiguous() # (B, num_seed, num_view) 物体点接触向量 logit
         end_points['objectness_score'] = objectness_score
         end_points['view_score'] = view_score
 

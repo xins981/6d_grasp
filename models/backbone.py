@@ -25,7 +25,7 @@ class SpoTrBackbone(nn.Module):
         p, f, idx = self.encoder.forward_seg_feat(data)
         f = self.decoder(p, f).squeeze(-1)
         num_seed = p[3].shape[1]
-        end_points['fp2_inds'] = idx[2][:, :num_seed] # (B, M)
+        end_points['fp2_inds'] = idx[2][:, :num_seed] # (B, M) 
         end_points['fp2_features'] = f # (B, 256, M)
         end_points['fp2_xyz'] = p[3] # (B, M, 3)
 

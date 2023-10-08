@@ -36,7 +36,8 @@ class GraspNetDataset(Dataset):
         self.collision_labels = {}
 
         if split == 'train':
-            self.sceneIds = list( range(100) )
+            # self.sceneIds = list( range(100) )
+            self.sceneIds = list( range(20) )
         elif split == 'test':
             self.sceneIds = list( range(100,190) )
         elif split == 'test_seen':
@@ -126,9 +127,9 @@ class GraspNetDataset(Dataset):
             align_mat = np.load(os.path.join(self.root, 'scenes', scene, self.camera, 'cam0_wrt_table.npy'))
             trans = np.dot(align_mat, camera_poses[self.frameid[index]])
             workspace_mask = get_workspace_mask(cloud, seg, trans=trans, organized=True, outlier=0.02)
-            mask = (depth_mask & workspace_mask)
+            mask = (depth_mask & workspace_mask & seg_mask)
         else:
-            mask = depth_mask
+            mask = (depth_mask & seg_mask)
         cloud_masked = cloud[mask]
         color_masked = color[mask]
         seg_masked = seg[mask]
@@ -178,8 +179,9 @@ class GraspNetDataset(Dataset):
             align_mat = np.load(os.path.join(self.root, 'scenes', scene, self.camera, 'cam0_wrt_table.npy'))
             trans = np.dot(align_mat, camera_poses[self.frameid[index]])
             workspace_mask = get_workspace_mask(cloud, seg, trans=trans, organized=True, outlier=0.02)
-            mask = (depth_mask & workspace_mask)
+            mask = (depth_mask & workspace_mask & seg_mask)
         else:
+            mask = (depth_mask & seg_mask)
             mask = depth_mask
         cloud_masked = cloud[mask]
         color_masked = color[mask]
@@ -247,8 +249,10 @@ class GraspNetDataset(Dataset):
 
         return ret_dict
 
+
 def load_grasp_labels(root):
     obj_names = list(range(88))
+    # obj_names = list(range(10))
     valid_obj_idxs = []
     grasp_labels = {}
     for i, obj_name in enumerate(tqdm(obj_names, desc='Loading grasping labels...')):
@@ -261,6 +265,7 @@ def load_grasp_labels(root):
 
     return valid_obj_idxs, grasp_labels
 
+
 def collate_fn(batch):
     if type(batch[0]).__module__ == 'numpy':
         return torch.stack([torch.from_numpy(b) for b in batch], 0)
@@ -270,6 +275,7 @@ def collate_fn(batch):
         return [[torch.from_numpy(sample) for sample in b] for b in batch]
     
     raise TypeError("batch must contain tensors, dicts or lists; found {}".format(type(batch[0])))
+
 
 if __name__ == "__main__":
     root = '/data/Benchmark/graspnet'

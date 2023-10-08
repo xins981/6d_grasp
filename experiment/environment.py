@@ -37,20 +37,24 @@ class Environment:
                 set_color(self.board, GREY)
                 tray = load_pybullet('experiment/resources/tray/traybox.urdf', fixed_base=True)
                 set_point(tray, [0.5, -0.5, 0.02/2])
-               
                 self.gripper = load_pybullet('experiment/resources/franka_description/robots/hand.urdf', fixed_base=True)
                 assign_link_colors(self.gripper, max_colors=3, s=0.5, v=1.)
                 set_configuration(self.gripper, CONF_OPEN)
                 set_pose(self.gripper, HOME_POSE_GRIPPER)
                 draw_pose(unit_pose(), parent=self.gripper, parent_link=link_from_name(self.gripper, 'panda_tcp'), length=0.04, width=3)
-                floor_from_camera = Pose(point=[0, 0.75, 1], euler=[-math.radians(145), 0, math.radians(180)])
-                world_from_floor = get_pose(self.board)
-                self.world_from_camera = multiply(world_from_floor, floor_from_camera)
+                # board_from_camera = Pose(point=[0, 0.75, 1], euler=[-math.radians(145), 0, math.radians(180)])
+                board_from_camera = Pose(point=[0, 0.65, 1], euler=[-math.radians(150), 0, math.radians(180)])
+                world_from_board = get_pose(self.board)
+                self.world_from_camera = multiply(world_from_board, board_from_camera)
+                draw_pose(self.world_from_camera, length=0.04, width=3)
                 self.camera = Camera(self.world_from_camera)
+                
+                # rgb, depth, seg = self.camera.render()
+                
                 self.fixed = [plane, tray]
-        self.workspace = np.asarray([[0.1, 0.9], 
-                                     [0.1, 0.9]])
-        self.aabb_workspace = aabb_from_extent_center([0.8, 0.8, 0.3], 
+        self.workspace = np.asarray([[0.2, 0.8], 
+                                     [0.2, 0.8]])
+        self.aabb_workspace = aabb_from_extent_center([0.6, 0.6, 0.3], 
                                                       [0.5, 0.5, 0.01+(0.3/2)])
         self.finger_joints = joints_from_names(self.gripper, ["panda_finger_joint1", "panda_finger_joint2"])
         self.finger_links = links_from_names(self.gripper, ['panda_leftfinger', 'panda_rightfinger'])
@@ -65,7 +69,6 @@ class Environment:
         
         self.mesh_ids = []
         self.mesh_to_urdf = {}
-
 
 
     def seed(self, seed=None):
@@ -103,68 +106,10 @@ class Environment:
             depth = grasp.depth
             grasp = np.eye(4)
             grasp[:3, :3] = r
-            # grasp[:3, 3] = t
-            # grasp_no_depth = multiply(self.world_from_camera, pose_from_tform(grasp))
-            # draw_pose(grasp_no_depth, length=0.04, width=3)
             grasp[:3, 3] = (r @ np.array([depth, 0, 0])) + t
-            # grasp_with_depth = multiply(self.world_from_camera, pose_from_tform(grasp))
-            # draw_pose(grasp_with_depth, length=0.08, width=5)
             camera_from_grasp = pose_from_tform(grasp)
             world_from_grasp = multiply(self.world_from_camera, camera_from_grasp)
             world_from_gripper = multiply(world_from_grasp, self.grasp_from_gripper)
-            # draw_pose(world_from_grasp, length=0.05, width=3)
-            # draw_pose(world_from_gripper, length=0.05, width=3)
-
-            # world_from_approach = multiply(world_from_gripper, self.gripper_from_approach)
-            # draw_pose(world_from_approach, length=0.05, width=3)
-            
-            # set_configuration(self.robot, HOME_JOINT_VALUES)
-            
-            # conf_init = get_joint_positions(self.robot, self.ik_joints)
-            # saved_world = WorldSaver()
-            
-            # conf_approach = get_ik_conf(self.robot, self.ik_info, self.ik_joints, self.tool_link, world_from_approach, obstacles=self.fixed)
-            # if conf_approach != None:
-            #     conf_grasp = get_ik_conf(self.robot, self.ik_info, self.ik_joints, self.tool_link, world_from_gripper, obstacles=self.fixed)
-            #     if conf_grasp != None:
-            #         set_joint_positions(self.robot, self.ik_joints, conf_approach)
-            #         path_approach_to_grasp = plan_direct_joint_motion(self.robot, self.ik_joints, conf_grasp, obstacles=self.fixed)
-            #         if path_approach_to_grasp != None:
-            #             set_joint_positions(self.robot, self.ik_joints, conf_init)
-            #             path_init_to_approach = plan_joint_motion(self.robot, self.ik_joints, conf_approach, obstacles=(self.fixed+self.mesh_ids))
-            #             if path_init_to_approach != None:
-            #                 commands_pre = Command([BodyPath(self.robot, path_init_to_approach, joints=self.ik_joints),
-            #                                         BodyPath(self.robot, path_approach_to_grasp, joints=self.ik_joints)])
-                            
-            #                 commands_post = Command([BodyPath(self.robot, path_approach_to_grasp[::-1], joints=self.ik_joints),
-            #                                         BodyPath(self.robot, path_init_to_approach[::-1], joints=self.ik_joints)])
-            #                 saved_world.restore()
-                            
-            #                 commands_pre.refine(num_steps=10).execute(time_step=0.005)
-            #                 self.close_ee()
-            #                 commands_post.refine(num_steps=10).execute(time_step=0.005)
-                            
-            #                 grasp_success = self.is_grasp_success()
-            #                 if grasp_success == True:
-            #                     grasped_obj = self.get_grasped_obj()
-            #                     # self.command_init_to_bin.refine(num_steps=10).execute(time_step=0.005)
-            #                     set_pose(grasped_obj, Pose(point=[0.5, -0.5, 0.4]))
-            #                 set_configuration(self.robot, HOME_JOINT_VALUES)
-            #             else:
-            #                 print("to approach pose plan failed")
-            #                 grasp_success = False
-            #         else:
-            #             print("to grasp pose plan failed")
-            #             grasp_success = False
-            #     else:
-            #         print("no grasp ik solution")
-            #         grasp_success = False
-            # else:
-            #     print("no approach ik solution")
-            #     grasp_success = False
-
-            # draw_pose(, length=0.5)
-
             set_pose(self.gripper, world_from_gripper)
             if any(pairwise_collision(self.gripper, b) for b in (self.fixed+self.mesh_ids)):
                 grasp_success = False
@@ -217,19 +162,27 @@ class Environment:
     def get_observation(self):
         rgb, depth, seg = self.camera.render()
         pts_scene = depth2xyzmap(depth, self.camera.k)
+        
         bg_mask = depth<0.1
-        for id in (self.fixed+[self.gripper]):
+        for id in (self.fixed+[self.gripper]): # , self.board
             bg_mask[seg==id] = 1
         camera_from_pts = pts_scene[bg_mask==False]
+
+        seg_save = seg.copy()
+        seg_save[seg_save==self.board] = 0
+        np.savez('sim.npz', rgb=rgb, xyz=pts_scene, label=seg_save)
         
+        if len(camera_from_pts) == 0:
+            return None, None
         colors_scene = rgb[bg_mask==False]
+        pcd_scene = toOpen3dCloud(camera_from_pts, colors_scene)
+        # o3d.io.write_point_cloud("pcd_scene.ply", pcd_scene)
+
         # data_to_save = {
         #     'xyz': camera_from_pts,
         #     'xyz_color': colors_scene
         # }
         # np.savez('point_and_color_data.npz', **data_to_save)
-        pcd_scene = toOpen3dCloud(camera_from_pts, colors_scene)
-        # o3d.io.write_point_cloud("pcd_scene.ply", pcd_scene)
 
         num_pts = 20000
         if len(camera_from_pts) >= num_pts:
@@ -249,9 +202,9 @@ class Environment:
     
     def add_objects(self):
         for urdf_path in self.urdf_files:
-            drop_x = (self.workspace[0][1] - self.workspace[0][0] - 0.4) * np.random.random_sample() + self.workspace[0][0] + 0.2
-            drop_y = (self.workspace[1][1] - self.workspace[1][0] - 0.4) * np.random.random_sample() + self.workspace[1][0] + 0.2
-            object_position = [drop_x, drop_y, 0.4]
+            drop_x = (self.workspace[0][1] - self.workspace[0][0] - 0.3) * np.random.random_sample() + self.workspace[0][0] + 0.15
+            drop_y = (self.workspace[1][1] - self.workspace[1][0] - 0.3) * np.random.random_sample() + self.workspace[1][0] + 0.15
+            object_position = [drop_x, drop_y, 0.2]
             object_orientation = [2*np.pi*np.random.random_sample(), 2*np.pi*np.random.random_sample(), 2*np.pi*np.random.random_sample()]
             object_pose = Pose(object_position, object_orientation)
             # vhacd_path = obj_path.replace('.obj', '_vhacd.obj')

@@ -1,3 +1,3 @@
-# CUDA_VISIBLE_DEVICES=1 python train.py --camera realsense --log_dir logs/log_rs_spotr/202309071803 --batch_size 4 --dataset_root data/Benchmark/graspnet
+python train.py --camera realsense --log_dir logs/log_rs/202310051223_rm_bg --batch_size 4 --dataset_root data/Benchmark/graspnet --learning_rate 0.005
 
-CUDA_VISIBLE_DEVICES=1 python train.py --camera realsense --log_dir logs/log_rs/202309100944 --batch_size 4 --dataset_root data/Benchmark/graspnet
+# python train.py --camera realsense --log_dir logs/log_rs/202309121637_rm_bg --batch_size 4 --dataset_root data/Benchmark/graspnet

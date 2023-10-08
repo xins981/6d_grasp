@@ -39,12 +39,10 @@ LR_DECAY_STEPS = [int(x) for x in cfgs.lr_decay_steps.split(',')]
 LR_DECAY_RATES = [float(x) for x in cfgs.lr_decay_rates.split(',')]
 assert(len(LR_DECAY_STEPS)==len(LR_DECAY_RATES))
 DEFAULT_CHECKPOINT_PATH = os.path.join(cfgs.log_dir, 'checkpoint.tar')
-CHECKPOINT_PATH = cfgs.checkpoint_path if cfgs.checkpoint_path is not None \
-    else DEFAULT_CHECKPOINT_PATH
+CHECKPOINT_PATH = cfgs.checkpoint_path if cfgs.checkpoint_path is not None else DEFAULT_CHECKPOINT_PATH
 
 if not os.path.exists(cfgs.log_dir):
     os.makedirs(cfgs.log_dir)
-
 LOG_FOUT = open(os.path.join(cfgs.log_dir, 'log_train.txt'), 'a')
 LOG_FOUT.write(str(cfgs)+'\n')
 def log_string(out_str):
@@ -64,7 +62,9 @@ TRAIN_DATASET = GraspNetDataset(cfgs.dataset_root, valid_obj_idxs, grasp_labels,
 
 # print(len(TRAIN_DATASET), len(TEST_DATASET))
 TRAIN_DATALOADER = DataLoader(TRAIN_DATASET, batch_size=cfgs.batch_size, shuffle=True,
-    num_workers=4, worker_init_fn=my_worker_init_fn, collate_fn=collate_fn)
+    num_workers=8, worker_init_fn=my_worker_init_fn, collate_fn=collate_fn)
+print(len(TRAIN_DATALOADER))
+
 # TEST_DATALOADER = DataLoader(TEST_DATASET, batch_size=cfgs.batch_size, shuffle=False,
 #     num_workers=4, worker_init_fn=my_worker_init_fn, collate_fn=collate_fn)
 # print(len(TRAIN_DATALOADER), len(TEST_DATALOADER))
@@ -108,7 +108,7 @@ def adjust_learning_rate(optimizer, epoch):
 
 # TensorBoard Visualizers
 TRAIN_WRITER = SummaryWriter(os.path.join(cfgs.log_dir, 'train'))
-TEST_WRITER = SummaryWriter(os.path.join(cfgs.log_dir, 'test'))
+# TEST_WRITER = SummaryWriter(os.path.join(cfgs.log_dir, 'test'))
 # ------------------------------------ GLOBAL CONFIG END ------------------------------------- 
 
 

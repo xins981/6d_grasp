@@ -963,8 +963,7 @@ class SPoTrDecoder2(nn.Module):
 
     def forward(self, p, f):
         for i in range(-1, -len(self.decoder) - 1, -1):
-            f[i - 1] = self.decoder[i][1:](
-                [p[i], self.decoder[i][0]([p[i - 1], f[i - 1]], [p[i], f[i]])])[1]
+            f[i - 1] = self.decoder[i][1:]([p[i], self.decoder[i][0]([p[i - 1], f[i - 1]], [p[i], f[i]])])[1]
         return f[3]
 
 
