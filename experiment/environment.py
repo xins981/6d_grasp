@@ -66,13 +66,10 @@ class Environment:
         self.mesh_ids = []
         self.mesh_to_urdf = {}
 
-
-
     def seed(self, seed=None):
         
         self._random = np.random.RandomState(seed)
         return seed
-
 
     def reset(self, seed = None, options = None):
         # set_configuration(self.robot, HOME_JOINT_VALUES)
@@ -86,7 +83,6 @@ class Environment:
         observation, pcd = self.get_observation()
         
         return observation, pcd, {}
-
 
     def step(self, gg):
         
@@ -103,68 +99,10 @@ class Environment:
             depth = grasp.depth
             grasp = np.eye(4)
             grasp[:3, :3] = r
-            # grasp[:3, 3] = t
-            # grasp_no_depth = multiply(self.world_from_camera, pose_from_tform(grasp))
-            # draw_pose(grasp_no_depth, length=0.04, width=3)
             grasp[:3, 3] = (r @ np.array([depth, 0, 0])) + t
-            # grasp_with_depth = multiply(self.world_from_camera, pose_from_tform(grasp))
-            # draw_pose(grasp_with_depth, length=0.08, width=5)
             camera_from_grasp = pose_from_tform(grasp)
             world_from_grasp = multiply(self.world_from_camera, camera_from_grasp)
             world_from_gripper = multiply(world_from_grasp, self.grasp_from_gripper)
-            # draw_pose(world_from_grasp, length=0.05, width=3)
-            # draw_pose(world_from_gripper, length=0.05, width=3)
-
-            # world_from_approach = multiply(world_from_gripper, self.gripper_from_approach)
-            # draw_pose(world_from_approach, length=0.05, width=3)
-            
-            # set_configuration(self.robot, HOME_JOINT_VALUES)
-            
-            # conf_init = get_joint_positions(self.robot, self.ik_joints)
-            # saved_world = WorldSaver()
-            
-            # conf_approach = get_ik_conf(self.robot, self.ik_info, self.ik_joints, self.tool_link, world_from_approach, obstacles=self.fixed)
-            # if conf_approach != None:
-            #     conf_grasp = get_ik_conf(self.robot, self.ik_info, self.ik_joints, self.tool_link, world_from_gripper, obstacles=self.fixed)
-            #     if conf_grasp != None:
-            #         set_joint_positions(self.robot, self.ik_joints, conf_approach)
-            #         path_approach_to_grasp = plan_direct_joint_motion(self.robot, self.ik_joints, conf_grasp, obstacles=self.fixed)
-            #         if path_approach_to_grasp != None:
-            #             set_joint_positions(self.robot, self.ik_joints, conf_init)
-            #             path_init_to_approach = plan_joint_motion(self.robot, self.ik_joints, conf_approach, obstacles=(self.fixed+self.mesh_ids))
-            #             if path_init_to_approach != None:
-            #                 commands_pre = Command([BodyPath(self.robot, path_init_to_approach, joints=self.ik_joints),
-            #                                         BodyPath(self.robot, path_approach_to_grasp, joints=self.ik_joints)])
-                            
-            #                 commands_post = Command([BodyPath(self.robot, path_approach_to_grasp[::-1], joints=self.ik_joints),
-            #                                         BodyPath(self.robot, path_init_to_approach[::-1], joints=self.ik_joints)])
-            #                 saved_world.restore()
-                            
-            #                 commands_pre.refine(num_steps=10).execute(time_step=0.005)
-            #                 self.close_ee()
-            #                 commands_post.refine(num_steps=10).execute(time_step=0.005)
-                            
-            #                 grasp_success = self.is_grasp_success()
-            #                 if grasp_success == True:
-            #                     grasped_obj = self.get_grasped_obj()
-            #                     # self.command_init_to_bin.refine(num_steps=10).execute(time_step=0.005)
-            #                     set_pose(grasped_obj, Pose(point=[0.5, -0.5, 0.4]))
-            #                 set_configuration(self.robot, HOME_JOINT_VALUES)
-            #             else:
-            #                 print("to approach pose plan failed")
-            #                 grasp_success = False
-            #         else:
-            #             print("to grasp pose plan failed")
-            #             grasp_success = False
-            #     else:
-            #         print("no grasp ik solution")
-            #         grasp_success = False
-            # else:
-            #     print("no approach ik solution")
-            #     grasp_success = False
-
-            # draw_pose(, length=0.5)
-
             set_pose(self.gripper, world_from_gripper)
             if any(pairwise_collision(self.gripper, b) for b in (self.fixed+self.mesh_ids)):
                 grasp_success = False
@@ -207,45 +145,59 @@ class Environment:
     
         return observation, pcd, terminated, info
 
-
     def close(self):
         
         disconnect()
         # p.unloadPlugin(self.plugin)
-    
 
     def get_observation(self):
         rgb, depth, seg = self.camera.render()
         pts_scene = depth2xyzmap(depth, self.camera.k)
-        bg_mask = depth<0.1
-        for id in (self.fixed+[self.gripper]):
-            bg_mask[seg==id] = 1
-        camera_from_pts = pts_scene[bg_mask==False]
+        # bg_mask = depth<0.1
+        board_mask = depth<0.1
+        obj_mask = depth<0.1
+        # for id in (self.fixed+[self.gripper]): # + self.board
+        #     bg_mask[seg==id] = 1
+        board_mask[seg==self.board] = 1
+        for id in (self.fixed+[self.gripper, self.board]): # + self.board
+            obj_mask[seg==id] = 1
         
-        colors_scene = rgb[bg_mask==False]
-        # data_to_save = {
-        #     'xyz': camera_from_pts,
-        #     'xyz_color': colors_scene
-        # }
-        # np.savez('point_and_color_data.npz', **data_to_save)
-        pcd_scene = toOpen3dCloud(camera_from_pts, colors_scene)
-        # o3d.io.write_point_cloud("pcd_scene.ply", pcd_scene)
-
-        num_pts = 20000
+        camera_from_board_pts = pts_scene[board_mask==True]
+        camera_from_obj_pts = pts_scene[obj_mask==False]
+        # seg_board_obj = seg[bg_mask==False]
+        # rgb = rgb[bg_mask==False]
+       
+        if len(camera_from_board_pts) == 0 :
+            return None, None
+       
+        num_pts = 12000
         if len(camera_from_pts) >= num_pts:
             select_obj_index = np.random.choice(len(camera_from_pts), num_pts, replace=False)
         else:
-            select_obj_index = np.random.choice(len(camera_from_pts), num_pts, replace=True)
+            idxs1 = np.arange(len(camera_from_pts))
+            idxs2 = np.random.choice(len(camera_from_pts), num_pts-len(camera_from_pts), replace=True)
+            select_obj_index = np.concatenate([idxs1, idxs2], axis=0)
         camera_from_pts = camera_from_pts[select_obj_index]
+        seg_board_obj = seg_board_obj[select_obj_index]
+        rgb = rgb[select_obj_index]
+        camera_from_pts_obj = camera_from_pts[seg_board_obj!=self.board]
         
-        # colors_objs, colors_floor = colors_objs[select_obj_index], colors_floor[select_obj_index]
-        # pcd_objs = toOpen3dCloud(world_from_pts_objs, colors_objs)
-        # pcd_floor = toOpen3dCloud(world_from_pts_floor, colors_floor)
-        # o3d.io.write_point_cloud(f'{self.pcd_dir}/objs_down.ply', pcd_objs)
-        # o3d.io.write_point_cloud(f'{self.pcd_dir}/floor_down.ply', pcd_floor)
+        # pcd_objs = toOpen3dCloud(camera_from_pts_obj)
+        pcd_scene = toOpen3dCloud(camera_from_pts, colors=rgb)
+        # o3d.io.write_point_cloud('pcd_objs.ply', pcd_objs)
+        # o3d.io.write_point_cloud('pcd_scene.ply', pcd_scene)
+        
+        num_pts_obj = 8000
+        if len(camera_from_pts_obj) >= num_pts_obj:
+            idxs = np.random.choice(len(camera_from_pts_obj), num_pts_obj, replace=False)
+        else:
+            idxs1 = np.arange(len(camera_from_pts_obj))
+            idxs2 = np.random.choice(len(camera_from_pts_obj), num_pts_obj-len(camera_from_pts_obj), replace=True)
+            idxs = np.concatenate([idxs1, idxs2], axis=0)
+        camera_from_pts_obj = camera_from_pts_obj[idxs]
 
-        return camera_from_pts.astype(np.float32), pcd_scene
-    
+        return camera_from_pts.astype(np.float32), camera_from_pts_obj.astype(np.float32)
+        # return camera_from_pts.astype(np.float32), pcd_scene
     
     def add_objects(self):
         for urdf_path in self.urdf_files:
@@ -261,7 +213,6 @@ class Environment:
             p.changeDynamics(obj_id, -1, lateralFriction=0.5, collisionMargin=0.0001)
             self.mesh_ids.append(obj_id)
     
-
     def sim_until_stable(self):
         while True:
             last_pos = {}
@@ -291,13 +242,11 @@ class Environment:
                     p.resetBaseVelocity(body_id, linearVelocity=[0,0,0], angularVelocity=[0,0,0])
                 break
 
-
     def clean_objects(self):
         
         for ob_id in self.mesh_ids:
             p.removeBody(ob_id)
         self.mesh_ids.clear()
-
 
     def exist_obj_in_workspace(self):
         
@@ -308,14 +257,12 @@ class Environment:
         else:
             return False
         
-
     def get_grasped_obj(self):
         
         for ob_id in self.mesh_ids:
             # if body_collision(self.robot, ob_id) == False:
             if any_link_pair_collision(self.gripper, self.finger_links, ob_id) == True:
                 return ob_id
-
 
     def close_ee(self):
         
@@ -329,7 +276,6 @@ class Environment:
         # for _ in joint_controller_hold(self.gripper, self.finger_joints, CONF_CLOSE, timeout=(50 * DEFAULT_TIME_STEP)):
         #     step_simulation()
 
-
     def open_ee(self):
 
         p.setJointMotorControlArray(self.gripper, jointIndices=self.finger_joints, controlMode=p.POSITION_CONTROL,
@@ -342,7 +288,6 @@ class Environment:
         # for _ in joint_controller_hold(self.gripper, self.finger_joints, CONF_OPEN, timeout=(50 * DEFAULT_TIME_STEP)):
         #     step_simulation()
 
-
     def is_grasp_success(self):
 
         # finger_joint_pos = np.array(get_joint_positions(self.robot, self.finger_joints))
@@ -351,7 +296,6 @@ class Environment:
             return False
         return True
     
-   
     def load_mesh(self, mesh_file, mesh_pose, mass, vhacd_file, scale=np.ones(3),has_collision=True,useFixedBase=False,concave=False,collision_margin=0.0001):
 
         if mesh_file in self.mesh_to_urdf:

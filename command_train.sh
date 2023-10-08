@@ -1,3 +1,5 @@
-# CUDA_VISIBLE_DEVICES=1 python train.py --camera realsense --log_dir logs/log_rs_spotr/202309071803 --batch_size 4 --dataset_root data/Benchmark/graspnet
+python -m torch.distributed.run --nnodes=1 --nproc_per_node=2 --max_restarts 0 --module train_dist \
+--camera realsense --log_dir logs/log_rs_spotr/202310062321_encode_bg_infer_only_obj --batch_size 1 \
+--dataset_root data/Benchmark/graspnet --learning_rate 0.001
 
-CUDA_VISIBLE_DEVICES=1 python train.py --camera realsense --log_dir logs/log_rs/202309100944 --batch_size 4 --dataset_root data/Benchmark/graspnet
+# CUDA_VISIBLE_DEVICES=0 python train.py --camera realsense --log_dir logs/log_rs/202309100944 --batch_size 4 --dataset_root data/Benchmark/graspnet

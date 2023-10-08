@@ -21,3 +21,5 @@ logs/log_*/train
 logs/log_*/test
 logs/log_*/*.txt
 
+*.ply
+

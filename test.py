@@ -33,8 +33,10 @@ def my_worker_init_fn(worker_id):
     np.random.seed(np.random.get_state()[1][0] + worker_id)
     pass
 
+split_str = "test_seen"
+
 # Create Dataset and Dataloader
-TEST_DATASET = GraspNetDataset(cfgs.dataset_root, valid_obj_idxs=None, grasp_labels=None, split='test', camera=cfgs.camera, num_points=cfgs.num_point, remove_outlier=False, augment=False, load_label=False)
+TEST_DATASET = GraspNetDataset(cfgs.dataset_root, valid_obj_idxs=None, grasp_labels=None, split=split_str, camera=cfgs.camera, num_points=cfgs.num_point, remove_outlier=False, augment=False, load_label=False)
 
 print(len(TEST_DATASET))
 SCENE_LIST = TEST_DATASET.scene_list()
@@ -99,8 +101,8 @@ def inference():
             tic = time.time()
 
 def evaluate():
-    ge = GraspNetEval(root=cfgs.dataset_root, camera=cfgs.camera, split='test')
-    res, ap = ge.eval_all(cfgs.dump_dir, proc=cfgs.num_workers)
+    ge = GraspNetEval(root=cfgs.dataset_root, camera=cfgs.camera, split=split_str)
+    res, ap = ge.eval_seen(cfgs.dump_dir, proc=cfgs.num_workers)
     save_dir = os.path.join(cfgs.dump_dir, 'ap_{}.npy'.format(cfgs.camera))
     np.save(save_dir, res)
 

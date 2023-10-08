@@ -7,14 +7,12 @@ from experiment.utils import toOpen3dCloud
 import open3d as o3d
 
 
-
 # Init the model
 net = GraspNet(input_feature_dim=0, num_view=300, num_angle=12, num_depth=4, cylinder_radius=0.05, hmin=-0.02, hmax_list=[0.01,0.02,0.03,0.04], is_training=False)
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 net.to(device)
 # Load checkpoint
-# log_dir = "logs/log_rs/202309100944"
-log_dir = "logs/log_rs_spotr/202309071803"
+log_dir = "logs/log_rs_spotr/202310051619_encode_bg_infer_only_obj"
 checkpoint = torch.load(f"{log_dir}/checkpoint.tar")
 net.load_state_dict(checkpoint['model_state_dict'])
 start_epoch = checkpoint['epoch']
@@ -28,13 +26,16 @@ num_success = 0
 num_colli = 0
 num_unstable = 0
 num_scene = 0
-num_objects = 2
+num_objects = 6
 end_points = {}
 
 observation, cloud, info = env.reset()
 observation = np.expand_dims(observation, axis=0)
 observation = torch.Tensor(observation).to(device)
+# pcd_obj = np.expand_dims(pcd_obj, axis=0)
+# pcd_obj = torch.Tensor(pcd_obj).to(device)
 end_points.update({"point_clouds": observation})
+# end_points.update({"pcd_obj": pcd_obj})
 while num_scene < 15 and terminated == False:
     num_scene += 1
     with torch.no_grad():
@@ -50,25 +51,33 @@ while num_scene < 15 and terminated == False:
     print(f"6d grasp: {len(gg)}")
     nms_gg = gg.nms(translation_thresh = 0.1, rotation_thresh = 30 / 180.0 * 3.1416)
     print(f"grasp after nms: {len(nms_gg)}")
-    grippers = nms_gg.to_open3d_geometry_list()
-    o3d.visualization.draw_geometries([cloud, *grippers])
+    
+    # grippers = nms_gg.to_open3d_geometry_list()
+    # o3d.visualization.draw_geometries([cloud, *grippers])
+    
     nms_gg = nms_gg.sort_by_score()
     observation, cloud, terminated, info = env.step(nms_gg)
-    observation = np.expand_dims(observation, axis=0)
-    observation = torch.Tensor(observation).to(device)
-    end_points.update({"point_clouds": observation})
     num_attem += info["num_attem"]
     num_colli += info["num_colli_grasp"]
     num_unstable += info["num_unstable_grasp"]
     if info["is_success"] == True:
         num_success += 1
 
+    if terminated == True:
+        break
+    observation = np.expand_dims(observation, axis=0)
+    observation = torch.Tensor(observation).to(device)
+    # pcd_obj = np.expand_dims(pcd_obj, axis=0)
+    # pcd_obj = torch.Tensor(pcd_obj).to(device)
+    end_points.update({"point_clouds": observation})
+    # end_points.update({"pcd_obj": pcd_obj})
+
 env.close()
 
 complete_rate = num_success / num_objects
-success_rate = num_success / (num_attem - num_colli)
+success_rate = num_success / (num_attem - num_colli + 0.000001)
 colli_rate = num_colli / num_attem
-unstable_rate = num_unstable / (num_attem - num_colli)
+unstable_rate = num_unstable / (num_attem - num_colli + 0.000001)
 
 
 print(f"num_objects: {num_objects}, num_attem: {num_attem}, num_colli: {num_colli}, num_success: {num_success},  num_unstable: {num_unstable}")

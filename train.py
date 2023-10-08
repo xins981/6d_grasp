@@ -59,7 +59,8 @@ def my_worker_init_fn(worker_id):
 
 # Create Dataset and Dataloader
 valid_obj_idxs, grasp_labels = load_grasp_labels(cfgs.dataset_root)
-TRAIN_DATASET = GraspNetDataset(cfgs.dataset_root, valid_obj_idxs, grasp_labels, camera=cfgs.camera, split='train', num_points=cfgs.num_point, remove_outlier=False, augment=True)
+TRAIN_DATASET = GraspNetDataset(cfgs.dataset_root, valid_obj_idxs, grasp_labels, camera=cfgs.camera, split='train', 
+                                num_points=cfgs.num_point, remove_outlier=False, augment=True, rm_bg=False)
 # TEST_DATASET = GraspNetDataset(cfgs.dataset_root, valid_obj_idxs, grasp_labels, camera=cfgs.camera, split='test_seen', num_points=cfgs.num_point, remove_outlier=True, augment=False)
 
 # print(len(TRAIN_DATASET), len(TEST_DATASET))
@@ -108,7 +109,7 @@ def adjust_learning_rate(optimizer, epoch):
 
 # TensorBoard Visualizers
 TRAIN_WRITER = SummaryWriter(os.path.join(cfgs.log_dir, 'train'))
-TEST_WRITER = SummaryWriter(os.path.join(cfgs.log_dir, 'test'))
+# TEST_WRITER = SummaryWriter(os.path.join(cfgs.log_dir, 'test'))
 # ------------------------------------ GLOBAL CONFIG END ------------------------------------- 
 
 

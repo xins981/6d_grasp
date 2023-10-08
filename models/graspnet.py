@@ -21,7 +21,7 @@ class GraspNetStage1(nn.Module):
         cfg.load("cfgs/benchmark/spotr.yaml", recursive=True)
         self.backbone = build_model_from_cfg(cfg.model)
         # self.backbone = Pointnet2Backbone(input_feature_dim)
-        self.vpmodule = ApproachNet(num_view, 256)
+        self.vpmodule = ApproachNet(num_view, 64)
 
     def forward(self, end_points):
         pointcloud = end_points['point_clouds'] # 除了点坐标，还可能有其他信息

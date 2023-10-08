@@ -1,7 +1,6 @@
 import numpy as np
 
-accu = np.load("logs/dump_rs/2309101201/ap_realsense.npy")
-# accu = np.load("logs/dump_rs_spotr/202309101756/ap_realsense.npy")
+accu = np.load("logs/dump_rs_spotr/202310051619_encode_bg_infer_only_obj/ap_realsense.npy")
 accu_seen = accu[:30, :, -1, [1, 3]]
 accu_similiar = accu[30:60, :, -1, [1, 3]]
 accu_unseen = accu[60:, :, -1, [1, 3]]
