@@ -33,17 +33,21 @@ def my_worker_init_fn(worker_id):
     np.random.seed(np.random.get_state()[1][0] + worker_id)
     pass
 
-split_str = "test_seen"
+split_str = "test"
 
 # Create Dataset and Dataloader
-TEST_DATASET = GraspNetDataset(cfgs.dataset_root, valid_obj_idxs=None, grasp_labels=None, split=split_str, camera=cfgs.camera, num_points=cfgs.num_point, remove_outlier=False, augment=False, load_label=False)
+TEST_DATASET = GraspNetDataset(cfgs.dataset_root, valid_obj_idxs=None, grasp_labels=None, split=split_str, 
+                               camera=cfgs.camera, num_points=cfgs.num_point, remove_outlier=False, 
+                               augment=False, load_label=False, rm_bg=False)
 
 print(len(TEST_DATASET))
 SCENE_LIST = TEST_DATASET.scene_list()
-TEST_DATALOADER = DataLoader(TEST_DATASET, batch_size=cfgs.batch_size, shuffle=False, num_workers=4, worker_init_fn=my_worker_init_fn, collate_fn=collate_fn)
+TEST_DATALOADER = DataLoader(TEST_DATASET, batch_size=cfgs.batch_size, shuffle=False, num_workers=4, 
+                             worker_init_fn=my_worker_init_fn, collate_fn=collate_fn)
 print(len(TEST_DATALOADER))
 # Init the model
-net = GraspNet(input_feature_dim=0, num_view=cfgs.num_view, num_angle=12, num_depth=4, cylinder_radius=0.05, hmin=-0.02, hmax_list=[0.01,0.02,0.03,0.04], is_training=False)
+net = GraspNet(input_feature_dim=0, num_view=cfgs.num_view, num_angle=12, num_depth=4, 
+               cylinder_radius=0.05, hmin=-0.02, hmax_list=[0.01,0.02,0.03,0.04], is_training=False)
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 net.to(device)
 # Load checkpoint
@@ -102,7 +106,7 @@ def inference():
 
 def evaluate():
     ge = GraspNetEval(root=cfgs.dataset_root, camera=cfgs.camera, split=split_str)
-    res, ap = ge.eval_seen(cfgs.dump_dir, proc=cfgs.num_workers)
+    res, ap = ge.eval_all(cfgs.dump_dir, proc=cfgs.num_workers)
     save_dir = os.path.join(cfgs.dump_dir, 'ap_{}.npy'.format(cfgs.camera))
     np.save(save_dir, res)
 

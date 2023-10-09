@@ -38,7 +38,7 @@ class SpoTrBackbone(nn.Module):
         # (B, 64, N)
         f = self.decoder(p, f)
         # (B, 1024)
-        obj_sampled_inds = end_points['pcd_obj_inds']
+        obj_sampled_inds = end_points['pcd_obj_inds'].long()
         # (B, 64, 1024)
         obj_sampled_f = torch.gather(f.transpose(1, 2), 1, obj_sampled_inds.unsqueeze(-1).expand(-1, -1, f.shape[1])).transpose(1, 2)
         # (B, 20000, 3)

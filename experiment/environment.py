@@ -38,19 +38,21 @@ class Environment:
                 tray = load_pybullet('experiment/resources/tray/traybox.urdf', fixed_base=True)
                 set_point(tray, [0.5, -0.5, 0.02/2])
                
-                self.gripper = load_pybullet('experiment/resources/franka_description/robots/hand.urdf', fixed_base=True)
-                assign_link_colors(self.gripper, max_colors=3, s=0.5, v=1.)
-                set_configuration(self.gripper, CONF_OPEN)
+                # self.gripper = load_pybullet('experiment/resources/franka_description/robots/hand.urdf', fixed_base=True)
+                self.gripper = load_pybullet('experiment/resources/robotiq_2f_140/urdf/robotiq_2f_140.urdf', fixed_base=True)
                 set_pose(self.gripper, HOME_POSE_GRIPPER)
-                draw_pose(unit_pose(), parent=self.gripper, parent_link=link_from_name(self.gripper, 'panda_tcp'), length=0.04, width=3)
-                floor_from_camera = Pose(point=[0, 0.75, 1], euler=[-math.radians(145), 0, math.radians(180)])
+                # assign_link_colors(self.gripper, max_colors=3, s=0.5, v=1.)
+                # set_configuration(self.gripper, CONF_OPEN)
+                # draw_pose(unit_pose(), parent=self.gripper, parent_link=link_from_name(self.gripper, 'panda_tcp'), length=0.04, width=3)
+                # floor_from_camera = Pose(point=[0, 0.75, 1], euler=[-math.radians(145), 0, math.radians(180)])
+                floor_from_camera = Pose(point=[0, 0.65, 1], euler=[-math.radians(150), 0, math.radians(180)])
                 world_from_floor = get_pose(self.board)
                 self.world_from_camera = multiply(world_from_floor, floor_from_camera)
                 self.camera = Camera(self.world_from_camera)
                 self.fixed = [plane, tray]
-        self.workspace = np.asarray([[0.1, 0.9], 
-                                     [0.1, 0.9]])
-        self.aabb_workspace = aabb_from_extent_center([0.8, 0.8, 0.3], 
+        self.workspace = np.asarray([[0.2, 0.8], 
+                                     [0.2, 0.8]])
+        self.aabb_workspace = aabb_from_extent_center([0.6, 0.6, 0.3], 
                                                       [0.5, 0.5, 0.01+(0.3/2)])
         self.finger_joints = joints_from_names(self.gripper, ["panda_finger_joint1", "panda_finger_joint2"])
         self.finger_links = links_from_names(self.gripper, ['panda_leftfinger', 'panda_rightfinger'])
@@ -80,9 +82,9 @@ class Environment:
         while self.sim_until_stable() == False:
             self.clean_objects()
             self.add_objects()
-        observation, pcd = self.get_observation()
+        pcd_scene, pcd_obj_inds, o3d_scene = self.get_observation()
         
-        return observation, pcd, {}
+        return pcd_scene, pcd_obj_inds, o3d_scene, {}
 
     def step(self, gg):
         
@@ -139,11 +141,11 @@ class Environment:
             if grasp_success == True:
                 break
             
-        observation, pcd = self.get_observation()
+        pcd_scene, pcd_obj_inds, o3d_scene = self.get_observation()
         terminated = not self.exist_obj_in_workspace()
         info = {"is_success": grasp_success, "num_attem": num_attem, 'num_colli_grasp': num_colli_grasp, "num_unstable_grasp": num_unstable_grasp}
     
-        return observation, pcd, terminated, info
+        return pcd_scene, pcd_obj_inds, o3d_scene, terminated, info
 
     def close(self):
         
@@ -153,57 +155,63 @@ class Environment:
     def get_observation(self):
         rgb, depth, seg = self.camera.render()
         pts_scene = depth2xyzmap(depth, self.camera.k)
-        # bg_mask = depth<0.1
-        board_mask = depth<0.1
-        obj_mask = depth<0.1
-        # for id in (self.fixed+[self.gripper]): # + self.board
-        #     bg_mask[seg==id] = 1
-        board_mask[seg==self.board] = 1
-        for id in (self.fixed+[self.gripper, self.board]): # + self.board
-            obj_mask[seg==id] = 1
-        
-        camera_from_board_pts = pts_scene[board_mask==True]
-        camera_from_obj_pts = pts_scene[obj_mask==False]
-        # seg_board_obj = seg[bg_mask==False]
-        # rgb = rgb[bg_mask==False]
-       
-        if len(camera_from_board_pts) == 0 :
-            return None, None
-       
-        num_pts = 12000
-        if len(camera_from_pts) >= num_pts:
-            select_obj_index = np.random.choice(len(camera_from_pts), num_pts, replace=False)
-        else:
-            idxs1 = np.arange(len(camera_from_pts))
-            idxs2 = np.random.choice(len(camera_from_pts), num_pts-len(camera_from_pts), replace=True)
-            select_obj_index = np.concatenate([idxs1, idxs2], axis=0)
-        camera_from_pts = camera_from_pts[select_obj_index]
-        seg_board_obj = seg_board_obj[select_obj_index]
-        rgb = rgb[select_obj_index]
-        camera_from_pts_obj = camera_from_pts[seg_board_obj!=self.board]
-        
-        # pcd_objs = toOpen3dCloud(camera_from_pts_obj)
-        pcd_scene = toOpen3dCloud(camera_from_pts, colors=rgb)
-        # o3d.io.write_point_cloud('pcd_objs.ply', pcd_objs)
-        # o3d.io.write_point_cloud('pcd_scene.ply', pcd_scene)
-        
-        num_pts_obj = 8000
-        if len(camera_from_pts_obj) >= num_pts_obj:
-            idxs = np.random.choice(len(camera_from_pts_obj), num_pts_obj, replace=False)
-        else:
-            idxs1 = np.arange(len(camera_from_pts_obj))
-            idxs2 = np.random.choice(len(camera_from_pts_obj), num_pts_obj-len(camera_from_pts_obj), replace=True)
-            idxs = np.concatenate([idxs1, idxs2], axis=0)
-        camera_from_pts_obj = camera_from_pts_obj[idxs]
+        bg_mask = depth < 0.1
+        for id in (self.fixed+[self.gripper]): # , self.board
+            bg_mask[seg==id] = 1
+        seg = seg[bg_mask==False]
+        pts_scene = pts_scene[bg_mask==False]
+        rgb = rgb[bg_mask==False]
 
-        return camera_from_pts.astype(np.float32), camera_from_pts_obj.astype(np.float32)
-        # return camera_from_pts.astype(np.float32), pcd_scene
+        # 下采样场景点云
+        num_scene_pts = 20000
+        if len(pts_scene) >= num_scene_pts:
+            select_scene_index = np.random.choice(len(pts_scene), num_scene_pts, replace=False)
+        else:
+            idxs1 = np.arange(len(pts_scene))
+            idxs2 = np.random.choice(len(pts_scene), num_scene_pts-len(pts_scene), replace=True)
+            select_scene_index = np.concatenate([idxs1, idxs2], axis=0)
+        # (num_scene_pts, 3)
+        pts_scene = pts_scene[select_scene_index]
+        seg = seg[select_scene_index]
+        rgb = rgb[select_scene_index]
+
+        # 采样物体点
+        pcd_obj_inds = np.argwhere(seg!=self.board).squeeze() # (N_obj,)
+        len_pcd_obj_inds = len(pcd_obj_inds)
+        num_obj_pts = 1024
+        if len_pcd_obj_inds >= num_obj_pts:
+            select_obj_index = np.random.choice(len_pcd_obj_inds, num_obj_pts, replace=False)
+            pcd_obj_inds = pcd_obj_inds[select_obj_index]
+        elif len_pcd_obj_inds > 0:
+            idxs1 = np.arange(len_pcd_obj_inds)
+            idxs2 = np.random.choice(len_pcd_obj_inds, num_obj_pts-len_pcd_obj_inds, replace=True)
+            select_obj_index = np.concatenate([idxs1, idxs2], axis=0)
+            pcd_obj_inds = pcd_obj_inds[select_obj_index]
+        else:
+            pcd_obj_inds = None
+        
+        # 调试
+        # (num_obj_pts, 3)
+        # pcd_obj = pts_scene[pcd_obj_inds]
+        # cloud = o3d.geometry.PointCloud()
+        # cloud.points = o3d.utility.Vector3dVector(pts_scene)
+        # o3d.io.write_point_cloud("pcd_scene.ply", cloud)
+        # cloud.points = o3d.utility.Vector3dVector(pcd_obj)
+        # o3d.io.write_point_cloud("pcd_obj.ply", cloud)
+
+        # 可视化
+        o3d_scene = toOpen3dCloud(pts_scene, rgb)
+
+        return pts_scene, pcd_obj_inds, o3d_scene
     
     def add_objects(self):
         for urdf_path in self.urdf_files:
-            drop_x = (self.workspace[0][1] - self.workspace[0][0] - 0.4) * np.random.random_sample() + self.workspace[0][0] + 0.2
-            drop_y = (self.workspace[1][1] - self.workspace[1][0] - 0.4) * np.random.random_sample() + self.workspace[1][0] + 0.2
-            object_position = [drop_x, drop_y, 0.4]
+            # drop_x = (self.workspace[0][1] - self.workspace[0][0] - 0.4) * np.random.random_sample() + self.workspace[0][0] + 0.2
+            # drop_y = (self.workspace[1][1] - self.workspace[1][0] - 0.4) * np.random.random_sample() + self.workspace[1][0] + 0.2
+            # object_position = [drop_x, drop_y, 0.4]
+            drop_x = (self.workspace[0][1] - self.workspace[0][0] - 0.3) * np.random.random_sample() + self.workspace[0][0] + 0.15
+            drop_y = (self.workspace[1][1] - self.workspace[1][0] - 0.3) * np.random.random_sample() + self.workspace[1][0] + 0.15
+            object_position = [drop_x, drop_y, 0.2]
             object_orientation = [2*np.pi*np.random.random_sample(), 2*np.pi*np.random.random_sample(), 2*np.pi*np.random.random_sample()]
             object_pose = Pose(object_position, object_orientation)
             # vhacd_path = obj_path.replace('.obj', '_vhacd.obj')

@@ -116,7 +116,6 @@ class GraspNetDataset(Dataset):
             idxs1 = np.arange(len(pcd_obj))
             idxs2 = np.random.choice(len(pcd_obj), num_pts_obj-len(pcd_obj), replace=True)
             idxs = np.concatenate([idxs1, idxs2], axis=0)
-        pcd_obj = pcd_obj[idxs]
         pcd_obj_inds = pcd_obj_inds[idxs] # (1024, )
         ret_dict['pcd_obj_inds'] = pcd_obj_inds
 
