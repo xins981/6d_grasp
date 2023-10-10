@@ -39,11 +39,51 @@ class Environment:
                 set_point(tray, [0.5, -0.5, 0.02/2])
                
                 # self.gripper = load_pybullet('experiment/resources/franka_description/robots/hand.urdf', fixed_base=True)
-                self.gripper = load_pybullet('experiment/resources/robotiq_2f_140/urdf/robotiq_2f_140.urdf', fixed_base=True)
+                self.gripper = load_pybullet('experiment/resources/robotiq_2f_140/urdf/ur5_robotiq_140.urdf', fixed_base=True)
                 set_pose(self.gripper, HOME_POSE_GRIPPER)
-                # assign_link_colors(self.gripper, max_colors=3, s=0.5, v=1.)
+                numJoints = p.getNumJoints(self.gripper)
+                jointInfo = namedtuple('jointInfo', 
+                    ['id','name','type','damping','friction','lowerLimit','upperLimit','maxForce','maxVelocity','controllable'])
+                self.joints = []
+                self.controllable_joints = []
+                for i in range(numJoints):
+                    info = p.getJointInfo(self.gripper, i)
+                    jointID = info[0]
+                    jointName = info[1].decode("utf-8")
+                    jointType = info[2]  # JOINT_REVOLUTE, JOINT_PRISMATIC, JOINT_SPHERICAL, JOINT_PLANAR, JOINT_FIXED
+                    jointDamping = info[6]
+                    jointFriction = info[7]
+                    jointLowerLimit = info[8]
+                    jointUpperLimit = info[9]
+                    jointMaxForce = info[10]
+                    jointMaxVelocity = info[11]
+                    controllable = (jointType != p.JOINT_FIXED)
+                    if controllable:
+                        self.controllable_joints.append(jointID)
+                        p.setJointMotorControl2(self.gripper, jointID, p.VELOCITY_CONTROL, targetVelocity=0, force=0)
+                    info = jointInfo(jointID,jointName,jointType,jointDamping,jointFriction,jointLowerLimit,
+                                    jointUpperLimit,jointMaxForce,jointMaxVelocity,controllable)
+                    self.joints.append(info)
+                mimic_parent_name = 'finger_joint'
+                mimic_children_names = {'right_outer_knuckle_joint': -1,
+                                        'left_inner_knuckle_joint': -1,
+                                        'right_inner_knuckle_joint': -1,
+                                        'left_inner_finger_joint': 1,
+                                        'right_inner_finger_joint': 1}
+                self.mimic_parent_id = [joint.id for joint in self.joints if joint.name == mimic_parent_name][0]
+                self.mimic_child_multiplier = {joint.id: mimic_children_names[joint.name] for joint in self.joints if joint.name in mimic_children_names}
+                for joint_id, multiplier in self.mimic_child_multiplier.items():
+                    c = p.createConstraint(self.gripper, self.mimic_parent_id,
+                                        self.gripper, joint_id,
+                                        jointType=p.JOINT_GEAR,
+                                        jointAxis=[0, 1, 0],
+                                        parentFramePosition=[0, 0, 0],
+                                        childFramePosition=[0, 0, 0])
+                    p.changeConstraint(c, gearRatio=-multiplier, maxForce=100, erp=1)  # Note: the mysterious `erp` is of EXTREME importance
+
+                assign_link_colors(self.gripper, max_colors=3, s=0.5, v=1.)
                 # set_configuration(self.gripper, CONF_OPEN)
-                # draw_pose(unit_pose(), parent=self.gripper, parent_link=link_from_name(self.gripper, 'panda_tcp'), length=0.04, width=3)
+                draw_pose(unit_pose(), parent=self.gripper, parent_link=link_from_name(self.gripper, 'tcp'), length=0.04, width=3)
                 # floor_from_camera = Pose(point=[0, 0.75, 1], euler=[-math.radians(145), 0, math.radians(180)])
                 floor_from_camera = Pose(point=[0, 0.65, 1], euler=[-math.radians(150), 0, math.radians(180)])
                 world_from_floor = get_pose(self.board)
@@ -54,9 +94,9 @@ class Environment:
                                      [0.2, 0.8]])
         self.aabb_workspace = aabb_from_extent_center([0.6, 0.6, 0.3], 
                                                       [0.5, 0.5, 0.01+(0.3/2)])
-        self.finger_joints = joints_from_names(self.gripper, ["panda_finger_joint1", "panda_finger_joint2"])
-        self.finger_links = links_from_names(self.gripper, ['panda_leftfinger', 'panda_rightfinger'])
-        self.grasp_from_gripper = Pose(point=Point(-0.1, 0, 0), euler=Euler(0, 1.57079632679489660, 0))
+        # self.finger_joints = joints_from_names(self.gripper, ["panda_finger_joint1", "panda_finger_joint2"])
+        # self.finger_links = links_from_names(self.gripper, ['panda_leftfinger', 'panda_rightfinger'])
+        self.grasp_from_gripper = Pose(point=Point(-0.2097, 0, 0), euler=Euler(0, 1.57079632679489660, 0))
         
         urdf_dir = "experiment/resources/objects/ycb"
         with open(f'{urdf_dir}/config.yml','r') as ff:
@@ -66,6 +106,7 @@ class Environment:
             self.urdf_files.append(os.path.join(urdf_dir, obj_name,"model.urdf"))
         
         self.mesh_ids = []
+        self.obj_id_to_name = {}
         self.mesh_to_urdf = {}
 
     def seed(self, seed=None):
@@ -76,7 +117,7 @@ class Environment:
     def reset(self, seed = None, options = None):
         # set_configuration(self.robot, HOME_JOINT_VALUES)
         set_pose(self.gripper, HOME_POSE_GRIPPER)
-        set_configuration(self.gripper, CONF_OPEN)
+        # set_configuration(self.gripper, CONF_OPEN)
         self.clean_objects()
         self.add_objects()
         while self.sim_until_stable() == False:
@@ -99,12 +140,14 @@ class Environment:
             t = grasp.translation
             r = grasp.rotation_matrix
             depth = grasp.depth
+            self.grasp_width = grasp.width
             grasp = np.eye(4)
             grasp[:3, :3] = r
             grasp[:3, 3] = (r @ np.array([depth, 0, 0])) + t
             camera_from_grasp = pose_from_tform(grasp)
             world_from_grasp = multiply(self.world_from_camera, camera_from_grasp)
             world_from_gripper = multiply(world_from_grasp, self.grasp_from_gripper)
+            self.open_ee()
             set_pose(self.gripper, world_from_gripper)
             if any(pairwise_collision(self.gripper, b) for b in (self.fixed+self.mesh_ids)):
                 grasp_success = False
@@ -127,6 +170,7 @@ class Environment:
                     self.sim_until_stable()
                     grasp_success = self.is_grasp_success()
                     if grasp_success == True:
+                        print(f"grasp {self.obj_id_to_name[grasped_obj]} success: 第 {i} 个. {gg[i].score} 分.")
                         set_point(grasped_obj, [0.5, -0.5, 0.5])
                     else:
                         saved_world.restore()
@@ -220,6 +264,9 @@ class Environment:
             obj_id = p.loadURDF(urdf_path, basePosition=object_pose[0], baseOrientation=object_pose[1], flags=flags)
             p.changeDynamics(obj_id, -1, lateralFriction=0.5, collisionMargin=0.0001)
             self.mesh_ids.append(obj_id)
+            obj_name = urdf_path.split('/')[-2]
+            self.obj_id_to_name[obj_id] = obj_name
+            
     
     def sim_until_stable(self):
         while True:
@@ -233,7 +280,7 @@ class Environment:
             stabled = True
             for _ in range(50):
                 p.stepSimulation()
-                time.sleep(1. / 240.)
+                # time.sleep(1. / 240.)
                 for body_id in self.mesh_ids:
                     cur_pos =  np.array(get_point(body_id))
                     motion = np.linalg.norm(cur_pos - last_pos[body_id])
@@ -268,29 +315,44 @@ class Environment:
     def get_grasped_obj(self):
         
         for ob_id in self.mesh_ids:
-            # if body_collision(self.robot, ob_id) == False:
-            if any_link_pair_collision(self.gripper, self.finger_links, ob_id) == True:
+            # if any_link_pair_collision(self.gripper, self.finger_links, ob_id) == True:
+            if body_collision(self.gripper, ob_id) == True:
                 return ob_id
 
-    def close_ee(self):
-        
-        p.setJointMotorControlArray(self.gripper, jointIndices=self.finger_joints, controlMode=p.POSITION_CONTROL,
-                                    targetPositions=CONF_CLOSE, forces=np.ones(2, dtype=float) * 40)
+    def move_finger(self, open_length):
+        open_length = np.clip(open_length, 0, 0.085)
+        open_angle = 0.715 - math.asin((open_length - 0.010) / 0.1143)  # angle calculation
+        # Control the mimic gripper joint(s)
+        p.setJointMotorControl2(self.gripper, self.mimic_parent_id, p.POSITION_CONTROL, 
+                                targetPosition=open_angle,
+                                # force=self.joints[self.mimic_parent_id].maxForce, 
+                                force=20)
+                                # maxVelocity=self.joints[self.mimic_parent_id].maxVelocity)
         for _ in range(50):
             p.stepSimulation()
-            time.sleep(1. / 240.)
+            # time.sleep(1. / 240.)
+
+    def close_ee(self):
+        self.move_finger(0)
+        
+        # p.setJointMotorControlArray(self.gripper, jointIndices=self.finger_joints, controlMode=p.POSITION_CONTROL,
+        #                             targetPositions=CONF_CLOSE, forces=np.ones(2, dtype=float) * 40)
+        # for _ in range(50):
+        #     p.stepSimulation()
+        #     time.sleep(1. / 240.)
         
         # for _ in joint_controller_hold(self.robot, [joint_from_name(self.robot, "panda_finger_joint1"), joint_from_name(self.robot, "panda_finger_joint2")], self.ee_close_values, timeout=(50*DEFAULT_TIME_STEP)):
         # for _ in joint_controller_hold(self.gripper, self.finger_joints, CONF_CLOSE, timeout=(50 * DEFAULT_TIME_STEP)):
         #     step_simulation()
 
     def open_ee(self):
+        self.move_finger(self.grasp_width)
 
-        p.setJointMotorControlArray(self.gripper, jointIndices=self.finger_joints, controlMode=p.POSITION_CONTROL,
-                                    targetPositions=CONF_OPEN, forces=np.ones(2, dtype=float) * 100)
-        for _ in range(50):
-            p.stepSimulation()
-            time.sleep(1. / 240.)
+        # p.setJointMotorControlArray(self.gripper, jointIndices=self.finger_joints, controlMode=p.POSITION_CONTROL,
+        #                             targetPositions=CONF_OPEN, forces=np.ones(2, dtype=float) * 100)
+        # for _ in range(50):
+        #     p.stepSimulation()
+        #     time.sleep(1. / 240.)
         
         # for _ in joint_controller_hold(self.robot, ["panda_finger_joint1", "panda_finger_joint2"], self.ee_open_values, timeout=(50*DEFAULT_TIME_STEP)):
         # for _ in joint_controller_hold(self.gripper, self.finger_joints, CONF_OPEN, timeout=(50 * DEFAULT_TIME_STEP)):
@@ -299,8 +361,9 @@ class Environment:
     def is_grasp_success(self):
 
         # finger_joint_pos = np.array(get_joint_positions(self.robot, self.finger_joints))
-        finger_joint_pos = np.array(get_joint_positions(self.gripper, self.finger_joints))
-        if np.all(finger_joint_pos < 0.001):
+        # finger_joint_pos = np.array(get_joint_positions(self.gripper, self.finger_joints))
+        if get_joint_position(self.gripper, self.mimic_parent_id) >= 0.69:
+        # if np.all(finger_joint_pos < 0.001):
             return False
         return True
     

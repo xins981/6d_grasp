@@ -11,7 +11,7 @@ net = GraspNet(input_feature_dim=0, num_view=300, num_angle=12, num_depth=4, cyl
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 net.to(device)
 # Load checkpoint
-checkpoint_dir = "logs/log_rs_spotr/202310062321_encode_bg_infer_only_obj/checkpoint_epoch_13.tar"
+checkpoint_dir = "logs/log_rs_spotr/202310062321_encode_bg_infer_only_obj/checkpoint_epoch_18.tar"
 checkpoint = torch.load(checkpoint_dir)
 net.load_state_dict(checkpoint['model_state_dict'])
 start_epoch = checkpoint['epoch']
@@ -52,10 +52,12 @@ for i in range(3):
         nms_gg = gg.nms(translation_thresh = 0.1, rotation_thresh = 30 / 180.0 * 3.1416)
         print(f"scene: {num_scene}. grasp nms rate: {len(nms_gg)} / {len(gg)}")
         
-        # grippers = nms_gg.to_open3d_geometry_list()
-        # if len(grippers) > 50:
-        #     grippers = grippers[:50]
-        # o3d.visualization.draw_geometries([o3d_scene, *grippers])
+        # nms_gg.sort_by_score(reverse=True) # 从低到高排
+        
+        grippers = nms_gg.to_open3d_geometry_list()
+        if len(grippers) > 50:
+            grippers = grippers[:50]
+        o3d.visualization.draw_geometries([o3d_scene, *grippers])
         
         nms_gg = nms_gg.sort_by_score()
         pcd_scene, pcd_obj_inds, o3d_scene, terminated, info = env.step(nms_gg)
