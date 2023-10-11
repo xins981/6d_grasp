@@ -23,8 +23,8 @@ load_obj:
     [
         "YcbBanana", 
         # "YcbCrackerBox", 
-        "YcbPear", 
-        "YcbStrawberry", 
+        # "YcbPear", 
+        # "YcbStrawberry", 
         "YcbTomatoSoupCan", 
         "YcbMediumClamp",
         "YcbFoamBrick",

@@ -88,6 +88,8 @@ class Environment:
                 floor_from_camera = Pose(point=[0, 0.65, 1], euler=[-math.radians(150), 0, math.radians(180)])
                 world_from_floor = get_pose(self.board)
                 self.world_from_camera = multiply(world_from_floor, floor_from_camera)
+                self.camera_from_ground_normal = (tform_from_pose(invert(self.world_from_camera)) @ np.array([0, 0, 1, 0]))[:3]
+                self.camera_from_ground_normal /= np.linalg.norm(self.camera_from_ground_normal)
                 self.camera = Camera(self.world_from_camera)
                 self.fixed = [plane, tray]
         self.workspace = np.asarray([[0.2, 0.8], 
@@ -123,16 +125,16 @@ class Environment:
         while self.sim_until_stable() == False:
             self.clean_objects()
             self.add_objects()
-        pcd_scene, pcd_obj_inds, o3d_scene = self.get_observation()
+        pcd_scene, pcd_obj_inds, o3d_scene, o3d_obj, seg_obj = self.get_observation()
         
-        return pcd_scene, pcd_obj_inds, o3d_scene, {}
+        return pcd_scene, pcd_obj_inds, o3d_scene, o3d_obj, seg_obj, {}
 
     def step(self, gg):
-        
         num_colli_grasp = 0
         num_unstable_grasp = 0
         num_attem = 0
         grasp_success = False
+        num_attempt = {}
 
         for i in range(0, min(len(gg), 50)):
             num_attem += 1
@@ -141,55 +143,98 @@ class Environment:
             r = grasp.rotation_matrix
             depth = grasp.depth
             self.grasp_width = grasp.width
+            targeted_obj = grasp.object_id
+            if targeted_obj not in num_attempt:
+                num_attempt[targeted_obj] = 0
+            else:
+                num_attempt[targeted_obj] += 1
+
+            self.open_ee()
             grasp = np.eye(4)
             grasp[:3, :3] = r
             grasp[:3, 3] = (r @ np.array([depth, 0, 0])) + t
             camera_from_grasp = pose_from_tform(grasp)
             world_from_grasp = multiply(self.world_from_camera, camera_from_grasp)
             world_from_gripper = multiply(world_from_grasp, self.grasp_from_gripper)
-            self.open_ee()
             set_pose(self.gripper, world_from_gripper)
+
             if any(pairwise_collision(self.gripper, b) for b in (self.fixed+self.mesh_ids)):
                 grasp_success = False
                 num_colli_grasp += 1
                 set_pose(self.gripper, HOME_POSE_GRIPPER)
                 self.open_ee()
+                if num_attempt[targeted_obj] > 0:
+                    set_point(targeted_obj, [0.5, -0.5, 0.5])
+                    break
                 continue
             else:
                 saved_world = WorldSaver()
+                j = 0
+                last_grasp = world_from_gripper
+                while j < 7:
+                    saved_world.restore()
+                    j += 1
+                    last_grasp = world_from_gripper
+                    try_depth = depth + 0.005 * j
+                    try_grasp = np.eye(4)
+                    try_grasp[:3, :3] = r
+                    # try_grasp[:3, 3] = (r @ np.array([try_depth, 0, 0])) + t
+                    try_grasp[:3, 3] = (r @ np.array([try_depth+0.0231, 0, 0])) + t
+                    camera_from_grasp = pose_from_tform(try_grasp)
+                    world_from_grasp = multiply(self.world_from_camera, camera_from_grasp)
+                    world_from_gripper = multiply(world_from_grasp, self.grasp_from_gripper)
+                    set_pose(self.gripper, world_from_gripper)
+
+                    if any(pairwise_collision(self.gripper, b) for b in (self.fixed+self.mesh_ids)) == True:
+                        break
+
+                    try_grasp[:3, 3] = (r @ np.array([try_depth, 0, 0])) + t
+                    camera_from_grasp = pose_from_tform(try_grasp)
+                    world_from_grasp = multiply(self.world_from_camera, camera_from_grasp)
+                    world_from_gripper = multiply(world_from_grasp, self.grasp_from_gripper)
+                    set_pose(self.gripper, world_from_gripper)
+                    
+                    width_before_close = get_joint_position(self.gripper, self.mimic_parent_id)
+                    self.close_ee()
+                    width_after_close = get_joint_position(self.gripper, self.mimic_parent_id)
+                    if abs(width_before_close - width_after_close) < 0.07:
+                        break
+                saved_world.restore()
+                set_pose(self.gripper, last_grasp)
+                saved_world = WorldSaver()
                 self.close_ee()
-                grasped_obj = self.get_grasped_obj()
-                if grasped_obj != None:
-                    world_from_gobj = get_pose(grasped_obj)
-                    gripper_from_world = invert(world_from_gripper)
-                    gripper_from_gobj = multiply(gripper_from_world, world_from_gobj)
-                    set_point(self.gripper, [0.5, 0.5, 0.5])
-                    world_from_gripper = get_pose(self.gripper)
-                    world_from_gobj = multiply(world_from_gripper, gripper_from_gobj)
-                    set_pose(grasped_obj, world_from_gobj)
-                    self.sim_until_stable()
-                    grasp_success = self.is_grasp_success()
-                    if grasp_success == True:
-                        print(f"grasp {self.obj_id_to_name[grasped_obj]} success: 第 {i} 个. {gg[i].score} 分.")
-                        set_point(grasped_obj, [0.5, -0.5, 0.5])
-                    else:
-                        saved_world.restore()
-                        num_unstable_grasp += 1
+                # grasped_obj = self.get_grasped_obj()
+                world_from_gobj = get_pose(targeted_obj)
+                gripper_from_world = invert(world_from_gripper)
+                gripper_from_gobj = multiply(gripper_from_world, world_from_gobj)
+                set_point(self.gripper, [0.5, 0.5, 0.5])
+                world_from_gripper = get_pose(self.gripper)
+                world_from_gobj = multiply(world_from_gripper, gripper_from_gobj)
+                set_pose(targeted_obj, world_from_gobj)
+                self.sim_until_stable()
+                grasp_success = self.is_grasp_success()
+                if grasp_success == True:
+                    print(f"grasp {self.obj_id_to_name[targeted_obj]} success: 第 {i} 个. {gg[i].score} 分.")
+                    set_point(targeted_obj, [0.5, -0.5, 0.5])
                 else:
                     saved_world.restore()
-                    grasp_success = False
                     num_unstable_grasp += 1
+                    if num_attempt[targeted_obj] > 0:
+                        set_point(targeted_obj, [0.5, -0.5, 0.5])
+                        
             set_pose(self.gripper, HOME_POSE_GRIPPER)
             self.open_ee()
             self.sim_until_stable()
-            if grasp_success == True:
+            if grasp_success == True or num_attempt[targeted_obj] > 0:
                 break
             
-        pcd_scene, pcd_obj_inds, o3d_scene = self.get_observation()
+        pcd_scene, pcd_obj_inds, o3d_scene, o3d_obj, seg_obj = self.get_observation()
         terminated = not self.exist_obj_in_workspace()
-        info = {"is_success": grasp_success, "num_attem": num_attem, 'num_colli_grasp': num_colli_grasp, "num_unstable_grasp": num_unstable_grasp}
+        info = {"is_success": grasp_success, "num_attem": num_attem, 
+                "num_colli_grasp": num_colli_grasp, "num_unstable_grasp": num_unstable_grasp,
+                }
     
-        return pcd_scene, pcd_obj_inds, o3d_scene, terminated, info
+        return pcd_scene, pcd_obj_inds, o3d_scene, o3d_obj, seg_obj, terminated, info
 
     def close(self):
         
@@ -233,6 +278,8 @@ class Environment:
             pcd_obj_inds = pcd_obj_inds[select_obj_index]
         else:
             pcd_obj_inds = None
+        # (1024, )
+        seg_obj = seg[pcd_obj_inds]
         
         # 调试
         # (num_obj_pts, 3)
@@ -245,8 +292,24 @@ class Environment:
 
         # 可视化
         o3d_scene = toOpen3dCloud(pts_scene, rgb)
+        
+        # 物体法线估计
+        if len_pcd_obj_inds == 0:
+            o3d_obj = None
+        else:
+            pcd_obj = pts_scene[pcd_obj_inds]
+            rgb = rgb[pcd_obj_inds]
+            o3d_obj = toOpen3dCloud(pcd_obj, rgb)
+            o3d.io.write_point_cloud("pcd_obj.ply", o3d_obj)
+            radius = 0.01  # 搜索半径
+            max_nn = 30  # 邻域内用于估算法线的最大点数
+            o3d_obj.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius, max_nn))
+            # o3d.visualization.draw_geometries([o3d_obj], window_name="法线估计",
+            #                                 point_show_normal=True,
+            #                                 width=800,  # 窗口宽度
+            #                                 height=600)  # 窗口高度
 
-        return pts_scene, pcd_obj_inds, o3d_scene
+        return pts_scene, pcd_obj_inds, o3d_scene, o3d_obj, seg_obj
     
     def add_objects(self):
         for urdf_path in self.urdf_files:
@@ -266,7 +329,6 @@ class Environment:
             self.mesh_ids.append(obj_id)
             obj_name = urdf_path.split('/')[-2]
             self.obj_id_to_name[obj_id] = obj_name
-            
     
     def sim_until_stable(self):
         while True:

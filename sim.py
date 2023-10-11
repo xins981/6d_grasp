@@ -4,6 +4,7 @@ from experiment.environment import Environment
 from models.graspnet import GraspNet, pred_decode
 from graspnetAPI import GraspGroup
 import open3d as o3d
+from utils.collision_detector import ModelFreeCollisionDetector
 
 # Init the model
 net = GraspNet(input_feature_dim=0, num_view=300, num_angle=12, num_depth=4, cylinder_radius=0.05, 
@@ -11,14 +12,14 @@ net = GraspNet(input_feature_dim=0, num_view=300, num_angle=12, num_depth=4, cyl
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 net.to(device)
 # Load checkpoint
-checkpoint_dir = "logs/log_rs_spotr/202310062321_encode_bg_infer_only_obj/checkpoint_epoch_18.tar"
+checkpoint_dir = "logs/log_rs_spotr/202310062321_encode_bg_infer_only_obj/checkpoint.tar"
 checkpoint = torch.load(checkpoint_dir)
 net.load_state_dict(checkpoint['model_state_dict'])
 start_epoch = checkpoint['epoch']
 print(f"-> loaded checkpoint {checkpoint_dir} (epoch: {start_epoch})")
 net.eval()
 
-env = Environment(vis=True)
+env = Environment(vis=False)
 
 for i in range(3):
     terminated = False
@@ -27,10 +28,11 @@ for i in range(3):
     num_colli = 0
     num_unstable = 0
     num_scene = 0
-    num_objects = 6
+    num_objects = 4
     end_points = {}
 
-    pcd_scene, pcd_obj_inds, o3d_scene, info = env.reset()
+    pcd_scene, pcd_obj_inds, o3d_scene, o3d_obj, seg_obj, info = env.reset()
+    cloud = pcd_scene.copy()
     pcd_scene = np.expand_dims(pcd_scene, axis=0)
     pcd_scene = torch.Tensor(pcd_scene).to(device)
     pcd_obj_inds = np.expand_dims(pcd_obj_inds, axis=0)
@@ -42,25 +44,58 @@ for i in range(3):
         with torch.no_grad():
             end_points = net(end_points)
             grasp_preds = pred_decode(end_points)
-        preds = grasp_preds[0].detach().cpu().numpy() # 0 batch id
+        # 取出第一个场景的预测结果 (1024，17)
+        preds = grasp_preds[0].detach().cpu().numpy()
 
         # grasp_pts = preds[:, 13:16]
         # pcd_grasp_pts = toOpen3dCloud(grasp_pts)
         # o3d.io.write_point_cloud("grasp_pts.ply", pcd_grasp_pts)
-
         gg = GraspGroup(preds)
-        nms_gg = gg.nms(translation_thresh = 0.1, rotation_thresh = 30 / 180.0 * 3.1416)
+        gg.object_ids = seg_obj
+
+        # grippers = gg.to_open3d_geometry_list()
+        # if len(grippers) > 50:
+        #     grippers = grippers[:50]
+        # o3d.visualization.draw_geometries([o3d_scene, *grippers])
+
+        # 按照点方向和地面的夹角重新打分
+        # (3, )
+        ground_normal = env.camera_from_ground_normal
+        # (1024, 3)
+        scene_normal = np.array(o3d_obj.normals)
+        # (1024, )
+        normal_score = scene_normal @ ground_normal
+        # （1024, )
+        quality_score = preds[:, 0]
+        new_score = 0.7 * normal_score + 0.3 * quality_score
+        
+        gg.scores = new_score
+        # grippers = gg.to_open3d_geometry_list()
+        # if len(grippers) > 50:
+        #     grippers = grippers[:50]
+        # o3d.visualization.draw_geometries([o3d_scene, *grippers])
+
+        nms_gg = gg.nms()
         print(f"scene: {num_scene}. grasp nms rate: {len(nms_gg)} / {len(gg)}")
         
-        # nms_gg.sort_by_score(reverse=True) # 从低到高排
+        # grippers = nms_gg.to_open3d_geometry_list()
+        # if len(grippers) > 50:
+        #     grippers = grippers[:50]
+        # o3d.visualization.draw_geometries([o3d_scene, *grippers])
+
+        # 碰撞检测
+        mfcdetector = ModelFreeCollisionDetector(cloud, voxel_size=0.01)
+        collision_mask = mfcdetector.detect(nms_gg, approach_dist=0.05, collision_thresh=0.01)
+        collision_free_gg = nms_gg[~collision_mask]
+        print(f"碰撞检测：{len(collision_free_gg)} / {len(nms_gg)}")
+
+        # collision_free_grippers = collision_free_gg.to_open3d_geometry_list()
+        # if len(collision_free_grippers) > 50:
+        #     collision_free_grippers = collision_free_grippers[:50]
+        # o3d.visualization.draw_geometries([o3d_scene, *collision_free_grippers])
         
-        grippers = nms_gg.to_open3d_geometry_list()
-        if len(grippers) > 50:
-            grippers = grippers[:50]
-        o3d.visualization.draw_geometries([o3d_scene, *grippers])
-        
-        nms_gg = nms_gg.sort_by_score()
-        pcd_scene, pcd_obj_inds, o3d_scene, terminated, info = env.step(nms_gg)
+        collision_free_gg = collision_free_gg.sort_by_score()
+        pcd_scene, pcd_obj_inds, o3d_scene, o3d_obj, seg_obj, terminated, info = env.step(collision_free_gg)
         num_attem += info["num_attem"]
         num_colli += info["num_colli_grasp"]
         num_unstable += info["num_unstable_grasp"]
