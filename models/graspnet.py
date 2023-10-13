@@ -13,6 +13,7 @@ from utils.loss_utils import GRASP_MAX_WIDTH, GRASP_MAX_TOLERANCE
 from utils.label_generation import process_grasp_labels, match_grasp_view_and_label, batch_viewpoint_params_to_matrix
 from openpoints.models.build import build_model_from_cfg
 from openpoints.utils import EasyConfig
+import time
 
 class GraspNetStage1(nn.Module):
     def __init__(self, input_feature_dim=0, num_view=300):
@@ -50,6 +51,7 @@ class GraspNetStage2(nn.Module):
             grasp_top_views_rot = end_points['grasp_top_view_rot']
             seed_xyz = end_points['fp2_xyz']
 
+
         vp_features = self.crop(seed_xyz, pointcloud, grasp_top_views_rot)
         end_points = self.operation(vp_features, end_points) # 拿每个圆柱体的特征，预测质量、旋转、宽度
         end_points = self.tolerance(vp_features, end_points)
@@ -65,10 +67,13 @@ class GraspNet(nn.Module):
         self.grasp_generator = GraspNetStage2(num_angle, num_depth, cylinder_radius, hmin, hmax_list, is_training)
 
     def forward(self, end_points):
+        tic = time.time()
         end_points = self.view_estimator(end_points)
         if self.is_training:
             end_points = process_grasp_labels(end_points)
         end_points = self.grasp_generator(end_points)
+        toc = time.time()
+        print(f"total forward time: {(toc - tic) * 1000} ms.")
         return end_points
 
 

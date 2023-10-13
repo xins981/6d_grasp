@@ -10,6 +10,7 @@ from openpoints.models.build import MODELS, build_model_from_cfg
 from knn.knn_modules import knn
 import open3d as o3d
 import numpy as np
+import time
 
 
 @MODELS.register_module()
@@ -26,22 +27,18 @@ class SpoTrBackbone(nn.Module):
     
     # data (B, N, 3) 场景点云
     def forward(self, data, end_points=None):
-        # p, f, idx = self.encoder.forward_seg_feat(data)
-        # f = self.decoder(p, f).squeeze(-1)
-        # num_seed = p[3].shape[1]
-        # end_points['fp2_inds'] = idx[2][:, :num_seed] # (B, M)
-        # end_points['fp2_features'] = f # (B, 256, M)
-        # end_points['fp2_xyz'] = p[3] # (B, M, 3)
-        # return f, end_points['fp2_xyz'], end_points
-
+        
+        tic = time.time()
         p, f, idx = self.encoder.forward_seg_feat(data)
         # (B, 64, N)
         f = self.decoder(p, f)
+        toc = time.time()
+        print(f"autoencoder time: {(toc - tic) * 1000} ms.")
         # (B, 1024)
         obj_sampled_inds = end_points['pcd_obj_inds'].long()
         # (B, 64, 1024)
         obj_sampled_f = torch.gather(f.transpose(1, 2), 1, obj_sampled_inds.unsqueeze(-1).expand(-1, -1, f.shape[1])).transpose(1, 2)
-        # (B, 20000, 3)
+        # (B, 1024, 3)
         obj_sampled_xyz = torch.gather(data, 1, obj_sampled_inds.unsqueeze(-1).expand(-1, -1, 3))
 
         # # 场景点云
