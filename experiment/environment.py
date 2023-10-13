@@ -11,7 +11,51 @@ from experiment.pybullet_tools.ikfast.ikfast import get_ik_joints, either_invers
 from experiment.utils import *
 import yaml
 
-# egl = pkgutil.get_loader('eglRenderer')
+# uois libraries. Ugly hack to import from sister directory
+import uois.src.data_augmentation as data_augmentation
+import uois.src.segmentation as segmentation
+import uois.src.util.utilities as util_
+import matplotlib.pyplot as plt
+dsn_config = {
+    # Sizes
+    'feature_dim' : 64, # 32 would be normal
+
+    # Mean Shift parameters (for 3D voting)
+    'max_GMS_iters' : 10, 
+    'epsilon' : 0.05, # Connected Components parameter
+    'sigma' : 0.02, # Gaussian bandwidth parameter
+    'num_seeds' : 200, # Used for MeanShift, but not BlurringMeanShift
+    'subsample_factor' : 5,
+    
+    # Misc
+    'min_pixels_thresh' : 500,
+    'tau' : 15.,
+}
+
+rrn_config = {
+    
+    # Sizes
+    'feature_dim' : 64, # 32 would be normal
+    'img_H' : 224,
+    'img_W' : 224,
+    
+    # architecture parameters
+    'use_coordconv' : False,
+}
+
+uois3d_config = {
+    
+    # Padding for RGB Refinement Network
+    'padding_percentage' : 0.25,
+    
+    # Open/Close Morphology for IMP (Initial Mask Processing) module
+    'use_open_close_morphology' : True,
+    'open_close_morphology_ksize' : 9,
+    
+    # Largest Connected Component for IMP module
+    'use_largest_connected_component' : True,
+}
+
 
 HOME_JOINT_VALUES = [0.00, 0.074, 0.00, -1.113, 0.00, 1.510, 0.671, 0.04, 0.04]
 HOME_POSE_GRIPPER = Pose(point=[0, 0, 1], euler=[0, math.radians(180), 0])
@@ -22,7 +66,6 @@ CONF_CLOSE = [0, 0]
 class Environment:
 
     def __init__(self, vis=False):
-
         method = p.GUI if vis else p.DIRECT
         sim_id = p.connect(method)
         p.setTimeStep(1. / 240.)
@@ -38,7 +81,6 @@ class Environment:
                 tray = load_pybullet('experiment/resources/tray/traybox.urdf', fixed_base=True)
                 set_point(tray, [0.5, -0.5, 0.02/2])
                
-                # self.gripper = load_pybullet('experiment/resources/franka_description/robots/hand.urdf', fixed_base=True)
                 self.gripper = load_pybullet('experiment/resources/robotiq_2f_140/urdf/ur5_robotiq_140.urdf', fixed_base=True)
                 set_pose(self.gripper, HOME_POSE_GRIPPER)
                 numJoints = p.getNumJoints(self.gripper)
@@ -82,9 +124,7 @@ class Environment:
                     p.changeConstraint(c, gearRatio=-multiplier, maxForce=100, erp=1)  # Note: the mysterious `erp` is of EXTREME importance
 
                 assign_link_colors(self.gripper, max_colors=3, s=0.5, v=1.)
-                # set_configuration(self.gripper, CONF_OPEN)
                 draw_pose(unit_pose(), parent=self.gripper, parent_link=link_from_name(self.gripper, 'tcp'), length=0.04, width=3)
-                # floor_from_camera = Pose(point=[0, 0.75, 1], euler=[-math.radians(145), 0, math.radians(180)])
                 floor_from_camera = Pose(point=[0, 0.65, 1], euler=[-math.radians(150), 0, math.radians(180)])
                 world_from_floor = get_pose(self.board)
                 self.world_from_camera = multiply(world_from_floor, floor_from_camera)
@@ -96,8 +136,6 @@ class Environment:
                                      [0.2, 0.8]])
         self.aabb_workspace = aabb_from_extent_center([0.6, 0.6, 0.3], 
                                                       [0.5, 0.5, 0.01+(0.3/2)])
-        # self.finger_joints = joints_from_names(self.gripper, ["panda_finger_joint1", "panda_finger_joint2"])
-        # self.finger_links = links_from_names(self.gripper, ['panda_leftfinger', 'panda_rightfinger'])
         self.grasp_from_gripper = Pose(point=Point(-0.2097, 0, 0), euler=Euler(0, 1.57079632679489660, 0))
         
         urdf_dir = "experiment/resources/objects/ycb"
@@ -111,15 +149,20 @@ class Environment:
         self.obj_id_to_name = {}
         self.mesh_to_urdf = {}
 
+        # 加载 uois 
+        checkpoint_dir = 'uois/checkpoints/' # TODO: change this to directory of downloaded models
+        dsn_filename = checkpoint_dir + 'DepthSeedingNetwork_3D_TOD_checkpoint.pth'
+        rrn_filename = checkpoint_dir + 'RRN_OID_checkpoint.pth'
+        uois3d_config['final_close_morphology'] = 'TableTop_v5' in rrn_filename
+        self.uois_net_3d = segmentation.UOISNet3D(uois3d_config, dsn_filename, dsn_config, rrn_filename, rrn_config)
+
     def seed(self, seed=None):
         
         self._random = np.random.RandomState(seed)
         return seed
 
     def reset(self, seed = None, options = None):
-        # set_configuration(self.robot, HOME_JOINT_VALUES)
         set_pose(self.gripper, HOME_POSE_GRIPPER)
-        # set_configuration(self.gripper, CONF_OPEN)
         self.clean_objects()
         self.add_objects()
         while self.sim_until_stable() == False:
@@ -242,12 +285,38 @@ class Environment:
         # p.unloadPlugin(self.plugin)
 
     def get_observation(self):
-        rgb, depth, seg = self.camera.render()
+        rgb, depth, seg_gt = self.camera.render()
+        # 结构化点云
         pts_scene = depth2xyzmap(depth, self.camera.k)
+        
+        # 将 rgb 和 点云 送进 uois
+        rgb_imgs = np.zeros((1, 480, 640, 3), dtype=np.float32) # 图像像素 640*480
+        xyz_imgs = np.zeros((1, 480, 640, 3), dtype=np.float32)
+
+        rgb_imgs[0] = data_augmentation.standardize_image(rgb)
+        xyz_imgs[0] = pts_scene
+
+        batch = {
+            'rgb' : data_augmentation.array_to_tensor(rgb_imgs),
+            'xyz' : data_augmentation.array_to_tensor(xyz_imgs),
+        }
+        _, _, _, seg_masks = self.uois_net_3d.run_on_batch(batch)
+
+        # Get results in numpy
+        seg = seg_masks[0].cpu().numpy()
+
+        num_objs = np.unique(seg).max() + 1
+        seg_plot = util_.get_color_mask(seg, nc=num_objs)
+        images = [rgb, depth, seg_plot]
+        titles = ['Image', 'Depth', 'Segmentation']
+        util_.subplotter(images, titles)
+        plt.show()
+
         bg_mask = depth < 0.1
-        for id in (self.fixed+[self.gripper]): # , self.board
-            bg_mask[seg==id] = 1
+        # for id in (self.fixed+[self.gripper]): # , self.board
+        #     bg_mask[seg==id] = 1
         seg = seg[bg_mask==False]
+        seg_gt = seg_gt[bg_mask==False]
         pts_scene = pts_scene[bg_mask==False]
         rgb = rgb[bg_mask==False]
 
@@ -262,10 +331,11 @@ class Environment:
         # (num_scene_pts, 3)
         pts_scene = pts_scene[select_scene_index]
         seg = seg[select_scene_index]
+        seg_gt = seg_gt[select_scene_index]
         rgb = rgb[select_scene_index]
 
         # 采样物体点
-        pcd_obj_inds = np.argwhere(seg!=self.board).squeeze() # (N_obj,)
+        pcd_obj_inds = np.argwhere(seg>0).squeeze() # (N_obj,)
         len_pcd_obj_inds = len(pcd_obj_inds)
         num_obj_pts = 1024
         if len_pcd_obj_inds >= num_obj_pts:
@@ -276,24 +346,17 @@ class Environment:
             idxs2 = np.random.choice(len_pcd_obj_inds, num_obj_pts-len_pcd_obj_inds, replace=True)
             select_obj_index = np.concatenate([idxs1, idxs2], axis=0)
             pcd_obj_inds = pcd_obj_inds[select_obj_index]
-        else:
-            pcd_obj_inds = None
         # (1024, )
-        seg_obj = seg[pcd_obj_inds]
+        seg_predict_grasp_point = seg_gt[pcd_obj_inds]
+        for seg_id in range(len(seg_predict_grasp_point)):
+            if seg_predict_grasp_point[seg_id] in (self.fixed+[self.gripper, self.board]):
+                seg_predict_grasp_point[seg_id] = 0
         
-        # 调试
-        # (num_obj_pts, 3)
-        # pcd_obj = pts_scene[pcd_obj_inds]
-        # cloud = o3d.geometry.PointCloud()
-        # cloud.points = o3d.utility.Vector3dVector(pts_scene)
-        # o3d.io.write_point_cloud("pcd_scene.ply", cloud)
-        # cloud.points = o3d.utility.Vector3dVector(pcd_obj)
-        # o3d.io.write_point_cloud("pcd_obj.ply", cloud)
-
         # 可视化
         o3d_scene = toOpen3dCloud(pts_scene, rgb)
-        
-        # 物体法线估计
+        o3d.io.write_point_cloud("pcd_scene.ply", o3d_scene)
+
+        # 物体点法向估计
         if len_pcd_obj_inds == 0:
             o3d_obj = None
         else:
@@ -304,12 +367,12 @@ class Environment:
             radius = 0.01  # 搜索半径
             max_nn = 30  # 邻域内用于估算法线的最大点数
             o3d_obj.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius, max_nn))
-            # o3d.visualization.draw_geometries([o3d_obj], window_name="法线估计",
-            #                                 point_show_normal=True,
-            #                                 width=800,  # 窗口宽度
-            #                                 height=600)  # 窗口高度
+            o3d.visualization.draw_geometries([o3d_obj], window_name="法线估计",
+                                            point_show_normal=True,
+                                            width=800,  # 窗口宽度
+                                            height=600)  # 窗口高度
 
-        return pts_scene, pcd_obj_inds, o3d_scene, o3d_obj, seg_obj
+        return pts_scene, pcd_obj_inds, o3d_scene, o3d_obj, seg_predict_grasp_point
     
     def add_objects(self):
         for urdf_path in self.urdf_files:

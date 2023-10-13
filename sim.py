@@ -19,7 +19,7 @@ start_epoch = checkpoint['epoch']
 print(f"-> loaded checkpoint {checkpoint_dir} (epoch: {start_epoch})")
 net.eval()
 
-env = Environment(vis=False)
+env = Environment(vis=True)
 
 for i in range(3):
     terminated = False
@@ -52,6 +52,7 @@ for i in range(3):
         # o3d.io.write_point_cloud("grasp_pts.ply", pcd_grasp_pts)
         gg = GraspGroup(preds)
         gg.object_ids = seg_obj
+        
 
         # grippers = gg.to_open3d_geometry_list()
         # if len(grippers) > 50:
@@ -68,8 +69,8 @@ for i in range(3):
         # （1024, )
         quality_score = preds[:, 0]
         new_score = 0.7 * normal_score + 0.3 * quality_score
-        
         gg.scores = new_score
+        
         # grippers = gg.to_open3d_geometry_list()
         # if len(grippers) > 50:
         #     grippers = grippers[:50]
@@ -88,6 +89,14 @@ for i in range(3):
         collision_mask = mfcdetector.detect(nms_gg, approach_dist=0.05, collision_thresh=0.01)
         collision_free_gg = nms_gg[~collision_mask]
         print(f"碰撞检测：{len(collision_free_gg)} / {len(nms_gg)}")
+
+        bg_ids = []
+        for g_id in range(len(collision_free_gg)):
+            g = collision_free_gg[g_id]
+            if g.object_id == 0:
+                bg_ids.append(g_id)
+        print(f"删除 {len(bg_ids)} 个背景抓取点")
+        collision_free_gg.remove(bg_ids)
 
         # collision_free_grippers = collision_free_gg.to_open3d_geometry_list()
         # if len(collision_free_grippers) > 50:
