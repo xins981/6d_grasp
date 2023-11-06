@@ -33,11 +33,11 @@ def my_worker_init_fn(worker_id):
     np.random.seed(np.random.get_state()[1][0] + worker_id)
     pass
 
-split_str = "test"
+split_str = "test_seen"
 
 # Create Dataset and Dataloader
 TEST_DATASET = GraspNetDataset(cfgs.dataset_root, valid_obj_idxs=None, grasp_labels=None, split=split_str, 
-                               camera=cfgs.camera, num_points=cfgs.num_point, remove_outlier=False, 
+                               camera=cfgs.camera, num_points=cfgs.num_point, remove_outlier=True, 
                                augment=False, load_label=False, rm_bg=False)
 
 print(len(TEST_DATASET))
@@ -60,11 +60,19 @@ print("-> loaded checkpoint %s (epoch: %d)"%(cfgs.checkpoint_path, start_epoch))
 # ------------------------------------------------------------------------- GLOBAL CONFIG END
 
 def inference():
-    batch_interval = 100
+    batch_interval = 256
     stat_dict = {} # collect statistics
     # set model to eval mode (for bn and dp)
     net.eval()
     tic = time.time()
+    total_coll = 0
+    total_pred = 0
+
+    # batch_data:
+    # 点云 B, 20000, 3
+    # 颜色 B, 20000, 3
+    # segmentation B, 20000
+    # 采样的物体id B， 1024
     for batch_idx, batch_data in enumerate(TEST_DATALOADER):
         for key in batch_data:
             if 'list' in key:
@@ -84,12 +92,17 @@ def inference():
             data_idx = batch_idx * cfgs.batch_size + i
             preds = grasp_preds[i].detach().cpu().numpy()
             gg = GraspGroup(preds)
+            num_pred = len(gg)
+            total_pred += num_pred
 
             # collision detection
             if cfgs.collision_thresh > 0:
                 cloud, _ = TEST_DATASET.get_data(data_idx, return_raw_cloud=True)
                 mfcdetector = ModelFreeCollisionDetector(cloud, voxel_size=cfgs.voxel_size)
                 collision_mask = mfcdetector.detect(gg, approach_dist=0.05, collision_thresh=cfgs.collision_thresh)
+                num_coll = np.count_nonzero(collision_mask)
+                total_coll += num_coll
+                print(f"collision rate: {(num_coll/num_pred):.2f}\n")
                 gg = gg[~collision_mask]
 
             # save grasps
@@ -103,10 +116,11 @@ def inference():
             toc = time.time()
             print('Eval batch: %d, time: %fs'%(batch_idx, (toc-tic)/batch_interval))
             tic = time.time()
+    print(f"collision rate in forward progress: {(total_coll/total_pred):.2f}")
 
 def evaluate():
     ge = GraspNetEval(root=cfgs.dataset_root, camera=cfgs.camera, split=split_str)
-    res, ap = ge.eval_all(cfgs.dump_dir, proc=cfgs.num_workers)
+    res, ap = ge.eval_seen(cfgs.dump_dir, proc=cfgs.num_workers)
     save_dir = os.path.join(cfgs.dump_dir, 'ap_{}.npy'.format(cfgs.camera))
     np.save(save_dir, res)
 

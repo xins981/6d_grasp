@@ -20,7 +20,6 @@ CONF_CLOSE = [0, 0]
 
 
 class Environment:
-
     def __init__(self, vis=False):
 
         method = p.GUI if vis else p.DIRECT
@@ -33,7 +32,7 @@ class Environment:
             with HideOutput(True):
                 plane = load_pybullet('experiment/resources/plane/plane.urdf', fixed_base=True)
                 self.board = load_pybullet('experiment/resources/board.urdf', fixed_base=True)
-                set_point(self.board, [0.5, 0.5, 0.01/2])
+                set_point(self.board, [0.5, 0.5, 0.005/2])
                 set_color(self.board, GREY)
                 tray = load_pybullet('experiment/resources/tray/traybox.urdf', fixed_base=True)
                 set_point(tray, [0.5, -0.5, 0.02/2])
@@ -85,34 +84,42 @@ class Environment:
                 # set_configuration(self.gripper, CONF_OPEN)
                 draw_pose(unit_pose(), parent=self.gripper, parent_link=link_from_name(self.gripper, 'tcp'), length=0.04, width=3)
                 # floor_from_camera = Pose(point=[0, 0.75, 1], euler=[-math.radians(145), 0, math.radians(180)])
-                floor_from_camera = Pose(point=[0, 0.65, 1], euler=[-math.radians(150), 0, math.radians(180)])
-                world_from_floor = get_pose(self.board)
-                self.world_from_camera = multiply(world_from_floor, floor_from_camera)
+                board_from_camera = Pose(point=[0, 0.65, 1], euler=[-math.radians(150), 0, math.radians(180)])
+                world_from_board = get_pose(self.board)
+                self.world_from_camera = multiply(world_from_board, board_from_camera)
                 self.camera_from_ground_normal = (tform_from_pose(invert(self.world_from_camera)) @ np.array([0, 0, 1, 0]))[:3]
                 self.camera_from_ground_normal /= np.linalg.norm(self.camera_from_ground_normal)
                 self.camera = Camera(self.world_from_camera)
                 self.fixed = [plane, tray]
-        self.workspace = np.asarray([[0.2, 0.8], 
-                                     [0.2, 0.8]])
-        self.aabb_workspace = aabb_from_extent_center([0.6, 0.6, 0.3], 
-                                                      [0.5, 0.5, 0.01+(0.3/2)])
+        self.workspace = np.asarray([[0.1, 0.9], 
+                                     [0.1, 0.9]])
+        self.aabb_workspace = aabb_from_extent_center([0.8, 0.8, 0.1], 
+                                                      [0.5, 0.5, 0.005/2])
         # self.finger_joints = joints_from_names(self.gripper, ["panda_finger_joint1", "panda_finger_joint2"])
         # self.finger_links = links_from_names(self.gripper, ['panda_leftfinger', 'panda_rightfinger'])
         self.grasp_from_gripper = Pose(point=Point(-0.2097, 0, 0), euler=Euler(0, 1.57079632679489660, 0))
         
-        urdf_dir = "experiment/resources/objects/ycb"
+        # YCB & OneBillion
+        urdf_dir = "experiment/resources/objects"
         with open(f'{urdf_dir}/config.yml','r') as ff:
             cfg = yaml.safe_load(ff)
         self.urdf_files = []
         for obj_name in cfg['load_obj']:
-            self.urdf_files.append(os.path.join(urdf_dir, obj_name,"model.urdf"))
+            self.urdf_files.append(os.path.join(urdf_dir, "pybullet_ycb", obj_name, "model.urdf"))
+
+        # OneBillion
+        # urdf_dir = "data/Benchmark/graspnet/models"
+        # with open(f'{urdf_dir}/config.yml','r') as ff:
+        #     cfg = yaml.safe_load(ff)
+        # self.urdf_files = []
+        # for obj_name in cfg['load_obj']:
+        #     self.urdf_files.append(os.path.join(urdf_dir, obj_name, "model.urdf"))
         
         self.mesh_ids = []
         self.obj_id_to_name = {}
         self.mesh_to_urdf = {}
 
     def seed(self, seed=None):
-        
         self._random = np.random.RandomState(seed)
         return seed
 
@@ -214,7 +221,7 @@ class Environment:
                 self.sim_until_stable()
                 grasp_success = self.is_grasp_success()
                 if grasp_success == True:
-                    print(f"grasp {self.obj_id_to_name[targeted_obj]} success: 第 {i} 个. {gg[i].score} 分.")
+                    # print(f"grasp {self.obj_id_to_name[targeted_obj]} success: 第 {i} 个. {gg[i].score} 分.")
                     set_point(targeted_obj, [0.5, -0.5, 0.5])
                 else:
                     saved_world.restore()
@@ -267,7 +274,7 @@ class Environment:
         # 采样物体点
         pcd_obj_inds = np.argwhere(seg!=self.board).squeeze() # (N_obj,)
         len_pcd_obj_inds = len(pcd_obj_inds)
-        num_obj_pts = 1024
+        num_obj_pts = 2048
         if len_pcd_obj_inds >= num_obj_pts:
             select_obj_index = np.random.choice(len_pcd_obj_inds, num_obj_pts, replace=False)
             pcd_obj_inds = pcd_obj_inds[select_obj_index]
@@ -313,25 +320,22 @@ class Environment:
     
     def add_objects(self):
         for urdf_path in self.urdf_files:
-            # drop_x = (self.workspace[0][1] - self.workspace[0][0] - 0.4) * np.random.random_sample() + self.workspace[0][0] + 0.2
-            # drop_y = (self.workspace[1][1] - self.workspace[1][0] - 0.4) * np.random.random_sample() + self.workspace[1][0] + 0.2
-            # object_position = [drop_x, drop_y, 0.4]
-            drop_x = (self.workspace[0][1] - self.workspace[0][0] - 0.3) * np.random.random_sample() + self.workspace[0][0] + 0.15
-            drop_y = (self.workspace[1][1] - self.workspace[1][0] - 0.3) * np.random.random_sample() + self.workspace[1][0] + 0.15
-            object_position = [drop_x, drop_y, 0.2]
-            object_orientation = [2*np.pi*np.random.random_sample(), 2*np.pi*np.random.random_sample(), 2*np.pi*np.random.random_sample()]
+            drop_x = (self.workspace[0][1] - self.workspace[0][0] - 0.2) * np.random.random_sample() + self.workspace[0][0] + 0.1
+            drop_y = (self.workspace[1][1] - self.workspace[1][0] - 0.2) * np.random.random_sample() + self.workspace[1][0] + 0.1
+            object_position = [drop_x, drop_y, 0.01]
+            # object_pose = Pose(object_position)
+            # object_orientation = [2*np.pi*np.random.random_sample(), 2*np.pi*np.random.random_sample(), 2*np.pi*np.random.random_sample()]
+            object_orientation = [0, 0, 2*np.pi*np.random.random_sample()]
             object_pose = Pose(object_position, object_orientation)
-            # vhacd_path = obj_path.replace('.obj', '_vhacd.obj')
-            # obj_id = self.load_mesh(mesh_file=obj_path, mesh_pose=object_pose, mass=0.1, vhacd_file=vhacd_path, scale=[1, 1, 1])
             flags = p.URDF_USE_INERTIA_FROM_FILE
-            obj_id = p.loadURDF(urdf_path, basePosition=object_pose[0], baseOrientation=object_pose[1], flags=flags)
-            p.changeDynamics(obj_id, -1, lateralFriction=0.5, collisionMargin=0.0001)
-            self.mesh_ids.append(obj_id)
             obj_name = urdf_path.split('/')[-2]
+            obj_id = p.loadURDF(urdf_path, basePosition=object_pose[0], baseOrientation=object_pose[1], flags=flags)
+            draw_pose(unit_pose(), parent=obj_id, length=0.04, width=3)
+            self.mesh_ids.append(obj_id)
             self.obj_id_to_name[obj_id] = obj_name
-    
+        
     def sim_until_stable(self):
-        while True:
+        for i in range(200):
             last_pos = {}
             accum_motions = {}
         
@@ -357,7 +361,9 @@ class Environment:
             if stabled:
                 for body_id in self.mesh_ids:
                     p.resetBaseVelocity(body_id, linearVelocity=[0,0,0], angularVelocity=[0,0,0])
-                break
+                return True
+        return False
+                
 
     def clean_objects(self):
         

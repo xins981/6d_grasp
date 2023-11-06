@@ -34,7 +34,8 @@ class SpoTrBackbone(nn.Module):
         # end_points['fp2_xyz'] = p[3] # (B, M, 3)
         # return f, end_points['fp2_xyz'], end_points
 
-        p, f, idx = self.encoder.forward_seg_feat(data)
+        p, f, idx, global_p = self.encoder.forward_seg_feat(data)
+        # p, f, idx = self.encoder.forward_seg_feat(data, color0=end_points["cloud_colors"])
         # (B, 64, N)
         f = self.decoder(p, f)
         # (B, 1024)
@@ -57,6 +58,7 @@ class SpoTrBackbone(nn.Module):
         end_points['fp2_inds'] = obj_sampled_inds
         end_points['fp2_features'] = obj_sampled_f
         end_points['fp2_xyz'] = obj_sampled_xyz
+        end_points['global_p'] = global_p
 
         return end_points['fp2_features'], end_points['fp2_xyz'], end_points
 

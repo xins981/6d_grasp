@@ -4,6 +4,7 @@ from experiment.environment import Environment
 from models.graspnet import GraspNet, pred_decode
 from graspnetAPI import GraspGroup
 import open3d as o3d
+import argparse
 from utils.collision_detector import ModelFreeCollisionDetector
 
 # Init the model
@@ -12,23 +13,34 @@ net = GraspNet(input_feature_dim=0, num_view=300, num_angle=12, num_depth=4, cyl
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 net.to(device)
 # Load checkpoint
-checkpoint_dir = "logs/log_rs_spotr/202310062321_encode_bg_infer_only_obj/checkpoint.tar"
-checkpoint = torch.load(checkpoint_dir)
-net.load_state_dict(checkpoint['model_state_dict'])
-start_epoch = checkpoint['epoch']
-print(f"-> loaded checkpoint {checkpoint_dir} (epoch: {start_epoch})")
-net.eval()
+checkpoint_dir = "logs/log_rs_spotr/2023-10-06-23-21/checkpoint.tar"
+# checkpoint = torch.load(checkpoint_dir)
+# net.load_state_dict(checkpoint['model_state_dict'])
+# start_epoch = checkpoint['epoch']
+# print(f"-> loaded checkpoint {checkpoint_dir} (epoch: {start_epoch})")
+# net.eval()
 
-env = Environment(vis=False)
+parser = argparse.ArgumentParser()
+parser.add_argument('--vis', type=int, default=0)
+parser.add_argument('--num_objs', type=int, default=5)
+parser.add_argument('--num_ites', type=int, default=10)
+cfgs = parser.parse_args()
 
-for i in range(3):
+env = Environment(vis=cfgs.vis)
+
+total_attempt = 0
+total_success = 0
+total_colli = 0
+total_unstable = 0
+
+for i in range(cfgs.num_ites):
     terminated = False
     num_attem = 0
     num_success = 0
     num_colli = 0
     num_unstable = 0
     num_scene = 0
-    num_objects = 4
+    num_objects = cfgs.num_objs
     end_points = {}
 
     pcd_scene, pcd_obj_inds, o3d_scene, o3d_obj, seg_obj, info = env.reset()
@@ -76,7 +88,7 @@ for i in range(3):
         # o3d.visualization.draw_geometries([o3d_scene, *grippers])
 
         nms_gg = gg.nms()
-        print(f"scene: {num_scene}. grasp nms rate: {len(nms_gg)} / {len(gg)}")
+        # print(f"scene: {num_scene}. grasp nms rate: {len(nms_gg)} / {len(gg)}")
         
         # grippers = nms_gg.to_open3d_geometry_list()
         # if len(grippers) > 50:
@@ -87,7 +99,7 @@ for i in range(3):
         mfcdetector = ModelFreeCollisionDetector(cloud, voxel_size=0.01)
         collision_mask = mfcdetector.detect(nms_gg, approach_dist=0.05, collision_thresh=0.01)
         collision_free_gg = nms_gg[~collision_mask]
-        print(f"碰撞检测：{len(collision_free_gg)} / {len(nms_gg)}")
+        # print(f"碰撞检测：{len(collision_free_gg)} / {len(nms_gg)}")
 
         # collision_free_grippers = collision_free_gg.to_open3d_geometry_list()
         # if len(collision_free_grippers) > 50:
@@ -114,17 +126,28 @@ for i in range(3):
 
     eps = np.finfo(np.float32).eps
     complete_rate = num_success / num_objects
-    success_rate = num_success / (num_attem - num_colli + eps)
+    # success_rate = num_success / (num_attem - num_colli + eps)
+    success_rate = num_success / num_attem
     colli_rate = num_colli / num_attem
     unstable_rate = num_unstable / (num_attem - num_colli + eps)
+
+    total_attempt += num_attem
+    total_success += num_success
+    total_colli += num_colli
+    total_unstable += num_unstable
 
     print(f"num_objects: {num_objects}, num_attem: {num_attem}, num_colli: {num_colli}, num_success: {num_success},  num_unstable: {num_unstable}")
     print(f"Complete rate: {complete_rate:.2f}")
     print(f"Success rate: {success_rate:.2f}")
     print(f"Collision rate: {colli_rate:.2f}")
     print(f"Unstable rate: {unstable_rate:.2f}")
+    # if total_attempt >= 20:
+    #     break
 
+print(f"total_attempt: {total_attempt}, total_success: {total_success}, success_rate: {(total_success/total_attempt):.2f}")
+print(f"total_colli: {(total_colli/total_attempt):.2f}, total_unstable: {(total_unstable/(total_attempt-total_colli)):.2f}")
 env.close()
+
 
 
 
