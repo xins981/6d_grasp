@@ -1,5 +1,4 @@
 **/__pycache__/**
-*.ipynb
 **/.ipynb_checkpoints/**
 *.npy
 *.npz
@@ -22,3 +21,5 @@ logs/log_*/test
 logs/log_*/*.txt
 
 test/
+vis_result/
+uois/

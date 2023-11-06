@@ -127,9 +127,9 @@ class GraspNetDataset(Dataset):
             align_mat = np.load(os.path.join(self.root, 'scenes', scene, self.camera, 'cam0_wrt_table.npy'))
             trans = np.dot(align_mat, camera_poses[self.frameid[index]])
             workspace_mask = get_workspace_mask(cloud, seg, trans=trans, organized=True, outlier=0.02)
-            mask = (depth_mask & workspace_mask & seg_mask)
+            mask = (depth_mask & workspace_mask)
         else:
-            mask = (depth_mask & seg_mask)
+            mask = (depth_mask)
         cloud_masked = cloud[mask]
         color_masked = color[mask]
         seg_masked = seg[mask]
@@ -179,10 +179,9 @@ class GraspNetDataset(Dataset):
             align_mat = np.load(os.path.join(self.root, 'scenes', scene, self.camera, 'cam0_wrt_table.npy'))
             trans = np.dot(align_mat, camera_poses[self.frameid[index]])
             workspace_mask = get_workspace_mask(cloud, seg, trans=trans, organized=True, outlier=0.02)
-            mask = (depth_mask & workspace_mask & seg_mask)
+            mask = (depth_mask & workspace_mask)
         else:
-            mask = (depth_mask & seg_mask)
-            mask = depth_mask
+            mask = (depth_mask)
         cloud_masked = cloud[mask]
         color_masked = color[mask]
         seg_masked = seg[mask]
