@@ -10,6 +10,7 @@ from openpoints.models.build import MODELS, build_model_from_cfg
 from knn.knn_modules import knn
 import open3d as o3d
 import numpy as np
+import time
 
 
 @MODELS.register_module()
@@ -38,11 +39,13 @@ class SpoTrBackbone(nn.Module):
         # p, f, idx = self.encoder.forward_seg_feat(data, color0=end_points["cloud_colors"])
         # (B, 64, N)
         f = self.decoder(p, f)
+        # toc = time.time()
+        # print(f"autoencoder time: {(toc - tic) * 1000} ms.")
         # (B, 1024)
         obj_sampled_inds = end_points['pcd_obj_inds'].long()
         # (B, 64, 1024)
         obj_sampled_f = torch.gather(f.transpose(1, 2), 1, obj_sampled_inds.unsqueeze(-1).expand(-1, -1, f.shape[1])).transpose(1, 2)
-        # (B, 20000, 3)
+        # (B, 1024, 3)
         obj_sampled_xyz = torch.gather(data, 1, obj_sampled_inds.unsqueeze(-1).expand(-1, -1, 3))
 
         # # 场景点云

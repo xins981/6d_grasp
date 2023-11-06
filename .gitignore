@@ -22,4 +22,4 @@ logs/log_*/test
 logs/log_*/*.txt
 
 *.ply
-
+uois/checkpoints/*
