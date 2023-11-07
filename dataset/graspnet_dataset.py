@@ -39,8 +39,8 @@ class GraspNetDataset(Dataset):
         self.rm_bg = rm_bg
 
         if split == 'train':
-            self.sceneIds = list( range(100) )
-            # self.sceneIds = list( range(20) )
+            # self.sceneIds = list( range(100) )
+            self.sceneIds = list( range(20) )
         elif split == 'test':
             self.sceneIds = list( range(100,190) )
         elif split == 'test_seen':

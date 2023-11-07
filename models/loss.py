@@ -70,9 +70,10 @@ def compute_view_loss(end_points):
 def compute_grasp_loss(end_points, use_template_in_training=True):
     top_view_inds = end_points['grasp_top_view_inds'] # (B, Ns)
     vp_rot = end_points['grasp_top_view_rot'] # (B, Ns, view_factor, 3, 3)
-    objectness_label = end_points['objectness_label']
-    fp2_inds = end_points['fp2_inds'].long()
-    objectness_mask = torch.gather(objectness_label, 1, fp2_inds).bool() # (B, Ns)
+    # objectness_label = end_points['objectness_label']
+    # fp2_inds = end_points['fp2_inds'].long()
+    # objectness_mask = torch.gather(objectness_label, 1, fp2_inds).bool() # (B, Ns)
+    objectness_mask = end_points['batch_graspable_point_label'].bool()
 
     # process labels
     batch_grasp_label = end_points['batch_grasp_label'] # (B, Ns, A, D)
