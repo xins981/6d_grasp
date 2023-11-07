@@ -109,14 +109,15 @@ class GraspNetDataset(Dataset):
         obj_mask = ret_dict['seg_mask']
         pcd_obj_inds = np.argwhere(obj_mask>0).squeeze() # (N_obj,)
         pcd_obj = pcd[obj_mask>0]
-        num_pts_obj = 1024
+        num_pts_obj = 2048
         if len(pcd_obj) >= num_pts_obj:
             idxs = np.random.choice(len(pcd_obj), num_pts_obj, replace=False)
         else:
             idxs1 = np.arange(len(pcd_obj))
             idxs2 = np.random.choice(len(pcd_obj), num_pts_obj-len(pcd_obj), replace=True)
             idxs = np.concatenate([idxs1, idxs2], axis=0)
-        pcd_obj_inds = pcd_obj_inds[idxs] # (1024, )
+        # (num_pts_obj, )
+        pcd_obj_inds = pcd_obj_inds[idxs] 
         ret_dict['pcd_obj_inds'] = pcd_obj_inds
 
         return ret_dict
@@ -285,7 +286,7 @@ class GraspNetDataset(Dataset):
 
 def load_grasp_labels(root):
     obj_names = list(range(88))
-    # obj_names = list(range(50))
+    # obj_names = list(range(10))
     valid_obj_idxs = []
     grasp_labels = {}
     for i, obj_name in enumerate(tqdm(obj_names, desc='Loading grasping labels...')):

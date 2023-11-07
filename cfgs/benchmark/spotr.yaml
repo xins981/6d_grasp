@@ -30,7 +30,7 @@ model:
     NAME: SPoTrEncoder2
     # 每个 block 中 LPA 模块数
     blocks: [1, 2, 2, 2, 2]
-    strides: [1, 4, 2, 2, 2] # 20000, 10000, 5000, 2500, 1250
+    strides: [1, 4, 2, 2, 2] # 20000, 5000, 2500, 1200, 600
     width: 64 # 第一层（纯 MLP）通道数 64, 128, 256, 512, 1024
     in_channels: 3
     expansion: 4
