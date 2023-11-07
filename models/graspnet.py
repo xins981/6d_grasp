@@ -67,13 +67,13 @@ class GraspNet(nn.Module):
         self.grasp_generator = GraspNetStage2(num_angle, num_depth, cylinder_radius, hmin, hmax_list, is_training)
 
     def forward(self, end_points):
-        tic = time.time()
+        # tic = time.time()
         end_points = self.view_estimator(end_points)
         if self.is_training:
             end_points = process_grasp_labels(end_points)
         end_points = self.grasp_generator(end_points)
-        toc = time.time()
-        print(f"total forward time: {(toc - tic) * 1000} ms.")
+        # toc = time.time()
+        # print(f"total forward time: {(toc - tic) * 1000} ms.")
         return end_points
 
 
@@ -112,15 +112,15 @@ def pred_decode(end_points):
         grasp_tolerance = torch.gather(grasp_tolerance, 1, grasp_depth_class)
 
         ## slice preds by objectness
-        # objectness_pred = torch.argmax(objectness_score, 0)
-        # objectness_mask = (objectness_pred==1)
-        # grasp_score = grasp_score[objectness_mask]
-        # grasp_width = grasp_width[objectness_mask]
-        # grasp_depth = grasp_depth[objectness_mask]
-        # approaching = approaching[objectness_mask]
-        # grasp_angle = grasp_angle[objectness_mask]
-        # grasp_center = grasp_center[objectness_mask]
-        # grasp_tolerance = grasp_tolerance[objectness_mask]
+        objectness_pred = torch.argmax(objectness_score, 0)
+        objectness_mask = (objectness_pred==1)
+        grasp_score = grasp_score[objectness_mask]
+        grasp_width = grasp_width[objectness_mask]
+        grasp_depth = grasp_depth[objectness_mask]
+        approaching = approaching[objectness_mask]
+        grasp_angle = grasp_angle[objectness_mask]
+        grasp_center = grasp_center[objectness_mask]
+        grasp_tolerance = grasp_tolerance[objectness_mask]
         grasp_score = grasp_score * grasp_tolerance / GRASP_MAX_TOLERANCE
 
         ## convert to rotation matrix

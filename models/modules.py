@@ -44,12 +44,12 @@ class ApproachNet(nn.Module):
                 end_points: [dict]
         """
         B, num_seed, _ = seed_xyz.size()
-        tic = time.time()
+        # tic = time.time()
         features = F.relu(self.bn1(self.conv1(seed_features)), inplace=True)
         features = F.relu(self.bn2(self.conv2(features)), inplace=True)
         features = self.conv3(features)
-        toc = time.time()
-        print(f'ApproachNet forward time: {(toc - tic) * 1000} ms.')
+        # toc = time.time()
+        # print(f'ApproachNet forward time: {(toc - tic) * 1000} ms.')
         objectness_score = features[:, :2, :] # (B, 2, num_seed) 点级别的质量
         view_score = features[:, 2:2+self.num_view, :].transpose(1,2).contiguous() # (B, num_seed, num_view) 接触向量级别的质量
         end_points['objectness_score'] = objectness_score
@@ -123,21 +123,22 @@ class CloudCrop(nn.Module):
         num_depth = len(self.groupers)
         grouped_features = []
         for grouper in self.groupers:
+            # (batch_size, feature_dim, num_seed, nsample) 3, 1024, 64。 取出 clidner 中的点，没有特征。每个 cliender 最多含 64 个点
             grouped_features.append(grouper(
                 pointcloud, seed_xyz, vp_rot
-            )) # (batch_size, feature_dim, num_seed, nsample) 3, 1024, 64。 取出 clidner 中的点，没有特征。每个 cliender 最多含 64 个点
-        grouped_features = torch.stack(grouped_features, dim=3) # (batch_size, feature_dim, num_seed, num_depth, nsample)
-        grouped_features = grouped_features.view(B, -1, num_seed*num_depth, self.nsample) # (batch_size, feature_dim, num_seed*num_depth, nsample)
+            )) 
+        # (batch_size, feature_dim, num_seed, num_depth, nsample)
+        grouped_features = torch.stack(grouped_features, dim=3) 
+        # (batch_size, feature_dim, num_seed*num_depth, nsample)
+        grouped_features = grouped_features.view(B, -1, num_seed*num_depth, self.nsample) 
 
-        tic = time.time()
-        vp_features = self.mlps(
-            grouped_features
-        ) # (batch_size, mlps[-1], num_seed*num_depth, nsample)
-        vp_features = F.max_pool2d(
-            vp_features, kernel_size=[1, vp_features.size(3)]
-        ) # (batch_size, mlps[-1], num_seed*num_depth, 1)
-        toc = time.time()
-        print(f'crop time: {(toc - tic) * 1000}')
+        # tic = time.time()
+        # (batch_size, mlps[-1], num_seed*num_depth, nsample)
+        vp_features = self.mlps(grouped_features) 
+        # (batch_size, mlps[-1], num_seed*num_depth, 1)
+        vp_features = F.max_pool2d(vp_features, kernel_size=[1, vp_features.size(3)]) 
+        # toc = time.time()
+        # print(f'crop time: {(toc - tic) * 1000}')
         vp_features = vp_features.view(B, -1, num_seed, num_depth)
         return vp_features
 
@@ -179,14 +180,14 @@ class OperationNet(nn.Module):
                 end_points: [dict]
         """
         B, _, num_seed, num_depth = vp_features.size()
-        tic = time.time()
+        # tic = time.time()
         vp_features = vp_features.view(B, -1, num_seed*num_depth)
         vp_features = F.relu(self.bn1(self.conv1(vp_features)), inplace=True)
         vp_features = F.relu(self.bn2(self.conv2(vp_features)), inplace=True)
         vp_features = self.conv3(vp_features)
         vp_features = vp_features.view(B, -1, num_seed, num_depth)
-        toc = time.time()
-        print(f"operation time: {(toc - tic) * 1000} ms.")
+        # toc = time.time()
+        # print(f"operation time: {(toc - tic) * 1000} ms.")
 
         # split prediction 分类 logists, 旋转角度确定靠分类，分数和宽度靠回归，每个旋转角度都有一个分数和宽度
         end_points['grasp_score_pred'] = vp_features[:, 0:self.num_angle]
@@ -227,13 +228,13 @@ class ToleranceNet(nn.Module):
                 end_points: [dict]
         """
         B, _, num_seed, num_depth = vp_features.size()
-        tic = time.time()
+        # tic = time.time()
         vp_features = vp_features.view(B, -1, num_seed*num_depth)
         vp_features = F.relu(self.bn1(self.conv1(vp_features)), inplace=True)
         vp_features = F.relu(self.bn2(self.conv2(vp_features)), inplace=True)
         vp_features = self.conv3(vp_features)
-        toc = time.time()
-        print(f"tolerance time: {(toc - tic) * 1000} ms.")
+        # toc = time.time()
+        # print(f"tolerance time: {(toc - tic) * 1000} ms.")
         vp_features = vp_features.view(B, -1, num_seed, num_depth)
         end_points['grasp_tolerance_pred'] = vp_features
         return end_points

@@ -24,12 +24,16 @@ def get_loss(end_points):
 
 
 def compute_objectness_loss(end_points):
-    criterion = nn.CrossEntropyLoss(reduction='mean')
+    criterion = nn.CrossEntropyLoss(reduction='none')
     objectness_score = end_points['objectness_score']
-    objectness_label = end_points['objectness_label']
-    fp2_inds = end_points['fp2_inds'].long()
-    objectness_label = torch.gather(objectness_label, 1, fp2_inds)
-    loss = criterion(objectness_score, objectness_label)
+    # objectness_label = end_points['objectness_label']
+    # fp2_inds = end_points['fp2_inds'].long()
+    # objectness_label = torch.gather(objectness_label, 1, fp2_inds)
+    # loss = criterion(objectness_score, objectness_label)
+    objectness_label = end_points['batch_graspable_point_label']
+    errors = criterion(objectness_score, objectness_label)
+    topk_values, _ = torch.topk(errors, k=512)
+    loss = torch.mean(topk_values)
 
     end_points['loss/stage1_objectness_loss'] = loss
 

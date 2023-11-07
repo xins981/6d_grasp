@@ -84,7 +84,7 @@ init_distributed()
 # Create Dataset and Dataloader
 valid_obj_idxs, grasp_labels = load_grasp_labels(cfgs.dataset_root)
 TRAIN_DATASET = GraspNetDataset(cfgs.dataset_root, valid_obj_idxs, grasp_labels, camera=cfgs.camera, split='train', 
-                                num_points=cfgs.num_point, remove_outlier=True, augment=True, rm_bg=False)
+                                num_points=cfgs.num_point, remove_outlier=True, augment=False, rm_bg=False)
 # TEST_DATASET = GraspNetDataset(cfgs.dataset_root, valid_obj_idxs, grasp_labels, camera=cfgs.camera, split='test_seen', num_points=cfgs.num_point, remove_outlier=True, augment=False)
 TRAIN_SAMPLER = DistributedSampler(TRAIN_DATASET)
 TRAIN_DATALOADER = DataLoader(TRAIN_DATASET, batch_size=cfgs.batch_size, num_workers=4, sampler=TRAIN_SAMPLER,
