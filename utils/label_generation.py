@@ -17,6 +17,7 @@ def process_grasp_labels(end_points):
     batch_grasp_labels = []
     batch_grasp_offsets = []
     batch_grasp_tolerance = []
+    # 遍历 batch 中的场景
     for i in range(len(clouds)):
         seed_xyz = seed_xyzs[i] #(Ns, 3)
         poses = end_points['object_poses_list'][i] #[(3, 4),]
@@ -28,6 +29,7 @@ def process_grasp_labels(end_points):
         grasp_labels_merged = []
         grasp_offsets_merged = []
         grasp_tolerance_merged = []
+        # 遍历场景中的物体
         for obj_idx, pose in enumerate(poses):
             grasp_points = end_points['grasp_points_list'][i][obj_idx] #(Np, 3)
             grasp_labels = end_points['grasp_labels_list'][i][obj_idx] #(Np, V, A, D)
@@ -47,6 +49,7 @@ def process_grasp_labels(end_points):
             # assign views
             grasp_views_ = grasp_views.transpose(0, 1).contiguous().unsqueeze(0)
             grasp_views_trans_ = grasp_views_trans.transpose(0, 1).contiguous().unsqueeze(0)
+            # knn(ref, queary, num_neighborhood)
             view_inds = knn(grasp_views_trans_, grasp_views_, k=1).squeeze() - 1
             grasp_views_trans = torch.index_select(grasp_views_trans, 0, view_inds) #(V, 3)
             grasp_views_trans = grasp_views_trans.unsqueeze(0).expand(num_grasp_points, -1, -1) #(Np, V, 3)
@@ -105,6 +108,10 @@ def process_grasp_labels(end_points):
     batch_grasp_labels[label_mask] = torch.log(u_max / batch_grasp_labels[label_mask])
     batch_grasp_labels[~label_mask] = 0
     batch_grasp_view_scores, _ = batch_grasp_labels.view(batch_size, num_samples, V, A*D).max(dim=-1)
+    batch_graspable_point_score = batch_grasp_view_scores.max(dim=-1)[0]
+    graspable_point_mask = (batch_graspable_point_score > 0.5)
+    batch_graspable_point_score[graspable_point_mask] = 1
+    batch_graspable_point_score[~graspable_point_mask] = 0
 
     end_points['batch_grasp_point'] = batch_grasp_points
     end_points['batch_grasp_view'] = batch_grasp_views
@@ -113,6 +120,7 @@ def process_grasp_labels(end_points):
     end_points['batch_grasp_offset'] = batch_grasp_offsets
     end_points['batch_grasp_tolerance'] = batch_grasp_tolerance
     end_points['batch_grasp_view_label'] = batch_grasp_view_scores.float()
+    end_points['batch_graspable_point_label'] = batch_graspable_point_score.long()
 
     return end_points
 

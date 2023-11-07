@@ -7,8 +7,10 @@ import sys
 import numpy as np
 import scipy.io as scio
 from PIL import Image
+import open3d as o3d
 
 import torch
+# from torch._six import container_abcs
 import collections.abc as container_abcs
 from torch.utils.data import Dataset
 from tqdm import tqdm
@@ -21,7 +23,7 @@ from utils.data_utils import CameraInfo, transform_point_cloud, create_point_clo
 
 class GraspNetDataset(Dataset):
     def __init__(self, root, valid_obj_idxs, grasp_labels, camera='kinect', split='train', num_points=20000,
-                 remove_outlier=False, remove_invisible=True, augment=False, load_label=True):
+                 remove_outlier=False, remove_invisible=True, augment=False, load_label=True, rm_bg=False):
         assert(num_points<=50000)
         self.root = root
         self.split = split
@@ -34,10 +36,11 @@ class GraspNetDataset(Dataset):
         self.augment = augment
         self.load_label = load_label
         self.collision_labels = {}
+        self.rm_bg = rm_bg
 
         if split == 'train':
-            # self.sceneIds = list( range(100) )
-            self.sceneIds = list( range(20) )
+            self.sceneIds = list( range(100) )
+            # self.sceneIds = list( range(20) )
         elif split == 'test':
             self.sceneIds = list( range(100,190) )
         elif split == 'test_seen':
@@ -98,9 +101,25 @@ class GraspNetDataset(Dataset):
 
     def __getitem__(self, index):
         if self.load_label:
-            return self.get_data_label(index)
+            ret_dict = self.get_data_label(index)
         else:
-            return self.get_data(index)
+            ret_dict = self.get_data(index)
+        
+        pcd = ret_dict['point_clouds']
+        obj_mask = ret_dict['seg_mask']
+        pcd_obj_inds = np.argwhere(obj_mask>0).squeeze() # (N_obj,)
+        pcd_obj = pcd[obj_mask>0]
+        num_pts_obj = 1024
+        if len(pcd_obj) >= num_pts_obj:
+            idxs = np.random.choice(len(pcd_obj), num_pts_obj, replace=False)
+        else:
+            idxs1 = np.arange(len(pcd_obj))
+            idxs2 = np.random.choice(len(pcd_obj), num_pts_obj-len(pcd_obj), replace=True)
+            idxs = np.concatenate([idxs1, idxs2], axis=0)
+        pcd_obj_inds = pcd_obj_inds[idxs] # (1024, )
+        ret_dict['pcd_obj_inds'] = pcd_obj_inds
+
+        return ret_dict
 
     def get_data(self, index, return_raw_cloud=False):
         color = np.array(Image.open(self.colorpath[index]), dtype=np.float32) / 255.0
@@ -127,9 +146,15 @@ class GraspNetDataset(Dataset):
             align_mat = np.load(os.path.join(self.root, 'scenes', scene, self.camera, 'cam0_wrt_table.npy'))
             trans = np.dot(align_mat, camera_poses[self.frameid[index]])
             workspace_mask = get_workspace_mask(cloud, seg, trans=trans, organized=True, outlier=0.02)
-            mask = (depth_mask & workspace_mask & seg_mask)
+            if self.rm_bg == True:
+                mask = (depth_mask & workspace_mask & seg_mask)
+            else:
+                mask = (depth_mask & workspace_mask)
         else:
-            mask = (depth_mask & seg_mask)
+            if self.rm_bg == True:
+                mask = (depth_mask & seg_mask)
+            else:
+                mask = depth_mask
         cloud_masked = cloud[mask]
         color_masked = color[mask]
         seg_masked = seg[mask]
@@ -145,10 +170,12 @@ class GraspNetDataset(Dataset):
             idxs = np.concatenate([idxs1, idxs2], axis=0)
         cloud_sampled = cloud_masked[idxs]
         color_sampled = color_masked[idxs]
+        seg_sampled = seg_masked[idxs]
         
         ret_dict = {}
         ret_dict['point_clouds'] = cloud_sampled.astype(np.float32)
         ret_dict['cloud_colors'] = color_sampled.astype(np.float32)
+        ret_dict['seg_mask'] = seg_sampled
 
         return ret_dict
 
@@ -179,10 +206,15 @@ class GraspNetDataset(Dataset):
             align_mat = np.load(os.path.join(self.root, 'scenes', scene, self.camera, 'cam0_wrt_table.npy'))
             trans = np.dot(align_mat, camera_poses[self.frameid[index]])
             workspace_mask = get_workspace_mask(cloud, seg, trans=trans, organized=True, outlier=0.02)
-            mask = (depth_mask & workspace_mask & seg_mask)
+            if self.rm_bg == True:
+                mask = (depth_mask & workspace_mask & seg_mask)
+            else:
+                mask = (depth_mask & workspace_mask)
         else:
-            mask = (depth_mask & seg_mask)
-            mask = depth_mask
+            if self.rm_bg == True:
+                mask = (depth_mask & seg_mask)
+            else:
+                mask = depth_mask
         cloud_masked = cloud[mask]
         color_masked = color[mask]
         seg_masked = seg[mask]
@@ -240,6 +272,7 @@ class GraspNetDataset(Dataset):
         ret_dict = {}
         ret_dict['point_clouds'] = cloud_sampled.astype(np.float32)
         ret_dict['cloud_colors'] = color_sampled.astype(np.float32)
+        ret_dict['seg_mask'] = seg_sampled
         ret_dict['objectness_label'] = objectness_label.astype(int)
         ret_dict['object_poses_list'] = object_poses_list
         ret_dict['grasp_points_list'] = grasp_points_list
@@ -252,7 +285,7 @@ class GraspNetDataset(Dataset):
 
 def load_grasp_labels(root):
     obj_names = list(range(88))
-    # obj_names = list(range(10))
+    # obj_names = list(range(50))
     valid_obj_idxs = []
     grasp_labels = {}
     for i, obj_name in enumerate(tqdm(obj_names, desc='Loading grasping labels...')):

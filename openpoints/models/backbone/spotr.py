@@ -20,6 +20,8 @@ from ..layers import create_convblock1d, create_convblock2d, create_act, CHANNEL
 from torch.autograd import Variable
 from einops import rearrange, repeat
 import numpy as np
+import open3d as o3d
+from experiment.utils import toOpen3dCloud
 
 
 
@@ -240,8 +242,7 @@ class SPALPA2(nn.Module):
         self.alpha=nn.Parameter(torch.zeros((1,), dtype=torch.float32)) 
         
         mid_channel = out_channels // 2 if stride > 1 else out_channels
-        channels = [in_channels] + [mid_channel] * \
-                   (layers - 1) + [out_channels]
+        channels = [in_channels] + [mid_channel] * (layers - 1) + [out_channels]
         channels[0] = in_channels if is_head else CHANNEL_MAP[feature_type](channels[0])
 
         if self.use_res:
@@ -298,6 +299,7 @@ class SPALPA2(nn.Module):
 
     def forward(self, pf):
         p, f = pf
+        global_p = None
         
         if self.is_head:
             f = self.convs(f)  # (n, c)
@@ -326,6 +328,12 @@ class SPALPA2(nn.Module):
                     interpolation_map = torch.bmm(z,fi) # (b,m,d)(b,d,n),  -> (b, m, n)
                     
                     global_p = torch.bmm((interpolation_map).softmax(-1), new_p) # (b,m,n),(b,n,3) -> (b, m, 3)
+
+                    # 物体样本点云
+                    # key_pcd = toOpen3dCloud(global_p[0].detach().cpu().numpy())
+                    # o3d.io.write_point_cloud(f"test/key_pcd_{z.shape[2]}.ply", key_pcd)
+
+
                     dist = torch.cdist(global_p, new_p) # (b,m,3),(b,n,3) -> (b,m,n)
                     g_kern = torch.exp(-self.gamma*dist.pow(2)) #(b, m, n)
                     
@@ -354,7 +362,7 @@ class SPALPA2(nn.Module):
             
             p = new_p
         
-        return p, f, idx
+        return p, f, idx, global_p
 
 
 class LPAMLP(nn.Module):
@@ -520,7 +528,7 @@ class LPAMLP2(nn.Module):
         if len(pf) == 2:
             p, f = pf
         else:
-            p, f, self.idx = pf
+            p, f, self.idx, global_p = pf
         
         identity = f
         dp, fj = self.grouper(p, p, f)
@@ -536,7 +544,7 @@ class LPAMLP2(nn.Module):
             f += identity
         f = self.act(f)
         
-        return p, f, self.idx 
+        return p, f, self.idx, global_p
 
 
 class FeaturePropogation(nn.Module):
@@ -585,8 +593,7 @@ class FeaturePropogation(nn.Module):
             p1, f1 = pf1
             p2, f2 = pf2
             if f1 is not None:
-                f = self.convs(
-                    torch.cat((f1, three_interpolation(p1, p2, f2)), dim=1))
+                f = self.convs(torch.cat((f1, three_interpolation(p1, p2, f2)), dim=1))
             else:
                 f = self.convs(three_interpolation(p1, p2, f2))
         return f
@@ -722,11 +729,17 @@ class SPoTrEncoder(nn.Module):
         dicts = {"p":p, "f" :f}
         return f0.squeeze(-1), dicts
 
-    def forward_seg_feat(self, p0, f0=None):
+    def forward_seg_feat(self, p0, f0=None, color0=None):
         if hasattr(p0, 'keys'):
             p0, f0 = p0['pos'], p0.get('x', None)
         if f0 is None:
             f0 = p0.clone().transpose(1, 2).contiguous()
+
+        # 场景点云
+        # if color0 != None:
+        #     scene_pcd = toOpen3dCloud(p0[0].detach().cpu().numpy(), color0[0].detach().cpu().numpy())
+        #     o3d.io.write_point_cloud(f"test/scene_pcd.ply", scene_pcd)
+        
         p, f, idx = [p0], [f0], [np.arange(0, p.shape[1])]
         for i in range(0, len(self.encoder)):
             _p, _f, _idx = self.encoder[i]([p[-1], f[-1]])
@@ -875,14 +888,15 @@ class SPoTrEncoder2(nn.Module):
             p0, f0 = p0['pos'], p0.get('x', None)
         if f0 is None:
             f0 = p0.clone().transpose(1, 2).contiguous()
-        p, f, idx = [p0], [f0], [np.arange(0, p0.shape[1])]
+        p, f, idx, global_p = [p0], [f0], [np.arange(0, p0.shape[1])], []
         for i in range(0, len(self.encoder)):
-            _p, _f, _idx = self.encoder[i]([p[-1], f[-1]])
+            _p, _f, _idx, _global_p = self.encoder[i]([p[-1], f[-1]])
             p.append(_p)
             f.append(_f)
             idx.append(_idx)
+            global_p.append(_global_p)
         
-        return p, f, idx
+        return p, f, idx, global_p
 
     def forward(self, p0, x0=None):
         return self.forward_cls_feat(p0, x0)
@@ -964,7 +978,8 @@ class SPoTrDecoder2(nn.Module):
     def forward(self, p, f):
         for i in range(-1, -len(self.decoder) - 1, -1):
             f[i - 1] = self.decoder[i][1:]([p[i], self.decoder[i][0]([p[i - 1], f[i - 1]], [p[i], f[i]])])[1]
-        return f[3]
+        # return f[3]
+        return f[1]
 
 
 @MODELS.register_module()

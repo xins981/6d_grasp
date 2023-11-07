@@ -1,1 +1,1 @@
-python generate_tolerance_label.py --dataset_root data/Benchmark/graspnet --num_workers 50
+python generate_tolerance_label.py --dataset_root /home/shixin/code/6d_grasp/data/Benchmark/graspnet --num_workers 50
