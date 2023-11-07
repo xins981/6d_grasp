@@ -39,8 +39,8 @@ class GraspNetDataset(Dataset):
         self.rm_bg = rm_bg
 
         if split == 'train':
-            self.sceneIds = list( range(100) )
-            # self.sceneIds = list( range(20) )
+            # self.sceneIds = list( range(100) )
+            self.sceneIds = list( range(20) )
         elif split == 'test':
             self.sceneIds = list( range(100,190) )
         elif split == 'test_seen':
@@ -283,8 +283,8 @@ class GraspNetDataset(Dataset):
         return ret_dict
 
 def load_grasp_labels(root):
-    obj_names = list(range(88))
-    # obj_names = list(range(50))
+    # obj_names = list(range(88))
+    obj_names = list(range(10))
     valid_obj_idxs = []
     grasp_labels = {}
     for i, obj_name in enumerate(tqdm(obj_names, desc='Loading grasping labels...')):
