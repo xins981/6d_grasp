@@ -113,14 +113,14 @@ def pred_decode(end_points):
 
         ## slice preds by objectness
         objectness_pred = torch.argmax(objectness_score, 0)
-        objectness_mask = (objectness_pred==1)
-        grasp_score = grasp_score[objectness_mask]
-        grasp_width = grasp_width[objectness_mask]
-        grasp_depth = grasp_depth[objectness_mask]
-        approaching = approaching[objectness_mask]
-        grasp_angle = grasp_angle[objectness_mask]
-        grasp_center = grasp_center[objectness_mask]
-        grasp_tolerance = grasp_tolerance[objectness_mask]
+        # objectness_mask = (objectness_pred==1)
+        # grasp_score = grasp_score[objectness_mask]
+        # grasp_width = grasp_width[objectness_mask]
+        # grasp_depth = grasp_depth[objectness_mask]
+        # approaching = approaching[objectness_mask]
+        # grasp_angle = grasp_angle[objectness_mask]
+        # grasp_center = grasp_center[objectness_mask]
+        # grasp_tolerance = grasp_tolerance[objectness_mask]
         grasp_score = grasp_score * grasp_tolerance / GRASP_MAX_TOLERANCE
 
         ## convert to rotation matrix
