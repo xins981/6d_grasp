@@ -22,3 +22,5 @@ logs/log_*/*.txt
 
 *.ply
 uois/
+*.exr
+*.xml
